@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5D23EEEC2D1FDC8200779174 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D23EEEB2D1FDC8200779174 /* UIKit.framework */; platformFilters = (ios, xros, ); };
+		5D23EEEE2D1FDC9300779174 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D23EEED2D1FDC9300779174 /* SwiftUI.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		5D23EEC12D1FCD7400779174 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		5D23EEAC2D1FCD7200779174 /* LuxMeter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LuxMeter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D23EEC02D1FCD7400779174 /* LuxMeterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LuxMeterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D23EECA2D1FCD7400779174 /* LuxMeterUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LuxMeterUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D23EEEB2D1FDC8200779174 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
+		5D23EEED2D1FDC9300779174 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,6 +72,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5D23EEEE2D1FDC9300779174 /* SwiftUI.framework in Frameworks */,
+				5D23EEEC2D1FDC8200779174 /* UIKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +100,7 @@
 				5D23EEAE2D1FCD7200779174 /* LuxMeter */,
 				5D23EEC32D1FCD7400779174 /* LuxMeterTests */,
 				5D23EECD2D1FCD7400779174 /* LuxMeterUITests */,
+				5D23EEEA2D1FDC8200779174 /* Frameworks */,
 				5D23EEAD2D1FCD7200779174 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +113,15 @@
 				5D23EECA2D1FCD7400779174 /* LuxMeterUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5D23EEEA2D1FDC8200779174 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5D23EEED2D1FDC9300779174 /* SwiftUI.framework */,
+				5D23EEEB2D1FDC8200779174 /* UIKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
