@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @State private var notificationsEnabled = true
     @State private var metricUnitsEnabled = true
-    
+
     var body: some View {
         NavigationView {
             Form {
@@ -12,7 +12,14 @@ struct SettingsView: View {
                     Toggle("Enable Notifications", isOn: $notificationsEnabled)
                     Toggle("Use Metric Units", isOn: $metricUnitsEnabled)
                 }
-                
+
+                // User Details Section
+                Section(header: Text("My Details")) {
+                    NavigationLink("My Details") {
+                        MyDetailsView()
+                    }
+                }
+
                 // Privacy Section
                 Section(header: Text("Privacy")) {
                     NavigationLink("Privacy Policy") {
@@ -22,7 +29,7 @@ struct SettingsView: View {
                         TermsOfServiceView()
                     }
                 }
-                
+
                 // Support Section
                 Section(header: Text("Support")) {
                     NavigationLink("Contact Support") {
@@ -32,7 +39,7 @@ struct SettingsView: View {
                         FAQView()
                     }
                 }
-                
+
                 // About Section
                 Section(header: Text("About")) {
                     Text("Version: 1.0.0")

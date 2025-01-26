@@ -1,17 +1,20 @@
-//
-//  LuxMeterApp.swift
-//  LuxMeter
-//
-//  Created by mathew on 28/12/2024.
-//
-
 import SwiftUI
+import Firebase
 
 @main
 struct LuxMeterApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var authViewModel = AuthViewModel()
+
     var body: some Scene {
         WindowGroup {
-            LandingView() // Start with the LandingView
+            if authViewModel.isLoggedIn {
+                MainTabView()
+                    .environmentObject(authViewModel)
+            } else {
+                LandingView() // Start at the introduction screen
+                    .environmentObject(authViewModel)
+            }
         }
     }
 }
