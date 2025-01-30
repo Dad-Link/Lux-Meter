@@ -3,41 +3,41 @@ import FirebaseAuth
 
 struct ForgotPasswordView: View {
     @State private var email = ""
+    @State private var confirmEmail = ""
+    @State private var securityAnswer = ""
     @State private var successMessage: String?
     @State private var errorMessage: String?
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.purple.opacity(0.8), Color.blue.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .edgesIgnoringSafeArea(.all)
+            // ✅ Black Background
+            Color.black.edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 20) {
                 Spacer()
 
-                // Title
+                // ✅ Title
                 Text("Reset Your Password")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(.gold)
 
-                // Description
-                Text("Enter your email address below, and we'll send you a link to reset your password. Make sure to check your inbox, including the spam folder.")
+                // ✅ Description
+                Text("Enter your email and confirm it below. Answer the security question if prompted.")
                     .font(.body)
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white.opacity(0.9))
                     .padding(.horizontal, 20)
 
-                // Email Input
-                TextField("Email", text: $email)
-                    .autocapitalization(.none)
-                    .styledTextField()
+                // ✅ Email Input Fields
+                GoldInputField(title: "Email", text: $email, isSecure: false)
+                GoldInputField(title: "Confirm Email", text: $confirmEmail, isSecure: false)
 
-                // Error and Success Messages
+                // ✅ Security Question Field (Optional)
+                GoldInputField(title: "Security Answer", text: $securityAnswer, isSecure: false)
+
+                // ✅ Error & Success Messages
                 if let errorMessage = errorMessage {
                     Text(errorMessage)
                         .foregroundColor(.red)
@@ -54,63 +54,54 @@ struct ForgotPasswordView: View {
                         .padding(.horizontal, 20)
                 }
 
-                // Reset Button
-                Button(action: resetPassword) {
-                    Text("Send Reset Link")
-                        .font(.headline)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.orange, Color.pink]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .foregroundColor(.white)
-                        .cornerRadius(15)
-                        .shadow(radius: 10)
-                        .padding(.horizontal, 40)
-                }
+                // ✅ Send Reset Link Button
+                GoldButton(title: "Send Reset Link", action: resetPassword)
 
-                // Back to Login Button
+                // ✅ Back to Login Button
                 Button(action: {
                     presentationMode.wrappedValue.dismiss()
                 }) {
                     Text("Back to Login")
                         .font(.subheadline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.gold)
                         .underline()
                         .padding(.top, 10)
                 }
 
                 Spacer()
 
-                // Contact Us Link
-                Link(destination: URL(string: "https://dadlink.co.uk/pages/contact")!) {
-                    Text("Contact Us")
-                        .font(.footnote)
-                        .foregroundColor(.white.opacity(0.7))
-                        .underline()
-                }
+                // ✅ Contact Us & Powered By Footer
+                VStack(spacing: 10) {
+                    Link(destination: URL(string: "https://dadlink.co.uk/pages/contact")!) {
+                        Text("Contact Us")
+                            .font(.footnote)
+                            .foregroundColor(.gold)
+                            .underline()
+                    }
 
-                // Powered By Footer
-                Link(destination: URL(string: "https://dadlink.co.uk")!) {
-                    Text("Powered by DadLink Technologies Limited")
-                        .font(.footnote)
-                        .foregroundColor(.white.opacity(0.7))
-                        .underline()
-                        .padding(.bottom, 20)
+                    Link(destination: URL(string: "https://dadlink.co.uk")!) {
+                        Text("Powered by DadLink Technologies Limited")
+                            .font(.footnote)
+                            .foregroundColor(.gold)
+                            .underline()
+                            .padding(.bottom, 20)
+                    }
                 }
             }
             .padding()
         }
-        .navigationBarHidden(true) // Hide the top back navigation
+        .navigationBarHidden(true) // ✅ Hide Navigation Bar
     }
 
+    // MARK: - Reset Password Function
     private func resetPassword() {
-        guard !email.isEmpty else {
-            errorMessage = "Please enter your email address."
+        guard !email.isEmpty, !confirmEmail.isEmpty else {
+            errorMessage = "Please enter and confirm your email."
+            return
+        }
+
+        guard email == confirmEmail else {
+            errorMessage = "Emails do not match."
             return
         }
 

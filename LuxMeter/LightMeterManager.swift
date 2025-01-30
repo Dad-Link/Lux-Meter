@@ -6,15 +6,16 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     private let sessionQueue = DispatchQueue(label: "LightMeter.SessionQueue")
     private var videoOutput: AVCaptureVideoDataOutput?
     private var currentPixelBuffer: CVPixelBuffer?
-
+    
     @Published var captureSession = AVCaptureSession()
     @Published var lightLevel: Float?
     
     private var shouldStartSession = false
-
-
     private var lastProcessedTime: CFTimeInterval = CACurrentMediaTime()
     private var isSessionConfigured = false
+    
+    // Calibration factor (can be adjusted later)
+    private let calibrationFactor: Float = 1.2 // Example value, adjust based on calibration
 
     func requestCameraPermission(completion: @escaping (Bool) -> Void) {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -65,7 +66,6 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
                 self.captureSession.commitConfiguration()
                 self.isSessionConfigured = true
 
-                // Only start the session if explicitly requested
                 if self.shouldStartSession {
                     self.captureSession.startRunning()
                     print("Capture session started.")
@@ -75,7 +75,6 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
             }
         }
     }
-
 
     func startMeasuring() {
         sessionQueue.async {
@@ -100,7 +99,6 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         }
     }
 
-
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let currentTime = CACurrentMediaTime()
         guard currentTime - lastProcessedTime > 0.1 else { return } // Process at ~10 FPS
@@ -109,7 +107,7 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         self.currentPixelBuffer = pixelBuffer
 
-        let brightness = computeBrightness(from: pixelBuffer)
+        let brightness = computeBrightness(from: pixelBuffer) * calibrationFactor
         DispatchQueue.main.async {
             self.lightLevel = brightness
             print("Current brightness: \(brightness) lx")
@@ -131,7 +129,6 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         return UIImage(cgImage: cgImage)
     }
 
-
     private func defaultCamera() -> AVCaptureDevice? {
         return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
     }
@@ -150,25 +147,24 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
         let bufferPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
 
-        var totalBrightness: Int = 0
+        var totalBrightness: Float = 0
         var pixelCount: Int = 0
 
-        let step = 5 // Sampling every 5 pixels for performance
+        let step = (lightLevel ?? 0) < 200 ? 3 : 5 // Adaptive step size
         for y in stride(from: 0, to: height, by: step) {
             for x in stride(from: 0, to: width, by: step) {
                 let pixelOffset = y * bytesPerRow + x * 4
-                let blue = bufferPointer[pixelOffset]
-                let green = bufferPointer[pixelOffset + 1]
-                let red = bufferPointer[pixelOffset + 2]
+                let blue = Float(bufferPointer[pixelOffset])
+                let green = Float(bufferPointer[pixelOffset + 1])
+                let red = Float(bufferPointer[pixelOffset + 2])
 
-                // Simple average to determine brightness
-                let brightness = (Int(red) + Int(green) + Int(blue)) / 3
+                // Weighted brightness formula
+                let brightness = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
                 totalBrightness += brightness
                 pixelCount += 1
             }
         }
 
-        let averageBrightness = pixelCount > 0 ? Float(totalBrightness) / Float(pixelCount) : 0
-        return averageBrightness
+        return pixelCount > 0 ? totalBrightness / Float(pixelCount) : 0
     }
 }

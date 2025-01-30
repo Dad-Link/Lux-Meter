@@ -19,6 +19,8 @@ struct MyDetailsView: View {
 
     var body: some View {
         ZStack {
+            Color.black.edgesIgnoringSafeArea(.all) // Set Background Color
+
             ScrollView {
                 VStack(spacing: 20) {
                     // Logo at the top
@@ -35,12 +37,12 @@ struct MyDetailsView: View {
                                 }
                         } else {
                             Circle()
-                                .strokeBorder(Color.gray, lineWidth: 2)
+                                .strokeBorder(Color.gold, lineWidth: 2)
                                 .frame(width: 120, height: 120)
                                 .overlay(
                                     Text("Tap to Add Logo")
                                         .font(.footnote)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.gold)
                                 )
                                 .onTapGesture {
                                     showImagePicker = true
@@ -54,9 +56,11 @@ struct MyDetailsView: View {
                         Text("My Details")
                             .font(.largeTitle)
                             .fontWeight(.bold)
+                            .foregroundColor(.gold)
 
                         Text("Manage your personal and business details. Keep everything up-to-date!")
                             .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.85))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
@@ -64,28 +68,18 @@ struct MyDetailsView: View {
                     // Form for details
                     VStack(spacing: 15) {
                         Group {
-                            TextField("First Name", text: $firstName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            TextField("Last Name", text: $lastName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            TextField("Personal Email", text: $personalEmail)
-                                .keyboardType(.emailAddress)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            CustomTextField(title: "First Name", text: $firstName)
+                            CustomTextField(title: "Last Name", text: $lastName)
+                            CustomTextField(title: "Personal Email", text: $personalEmail, keyboardType: .emailAddress)
                         }
 
-                        Divider()
+                        Divider().background(Color.gold)
 
                         Group {
-                            TextField("Business Name", text: $businessName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            TextField("Business Address", text: $businessAddress)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            TextField("Business Email", text: $businessEmail)
-                                .keyboardType(.emailAddress)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            TextField("Business Number", text: $businessNumber)
-                                .keyboardType(.phonePad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            CustomTextField(title: "Business Name", text: $businessName)
+                            CustomTextField(title: "Business Address", text: $businessAddress)
+                            CustomTextField(title: "Business Email", text: $businessEmail, keyboardType: .emailAddress)
+                            CustomTextField(title: "Business Number", text: $businessNumber, keyboardType: .phonePad)
                         }
                     }
                     .padding(.horizontal)
@@ -96,11 +90,21 @@ struct MyDetailsView: View {
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
+                            .background(Color.gold)
+                            .foregroundColor(.black)
                             .cornerRadius(10)
                             .shadow(radius: 5)
                             .padding(.horizontal)
+                    }
+
+                    // Powered By Footer
+                    Link(destination: URL(string: "https://dadlink.co.uk")!) {
+                        Text("Powered by DadLink Technologies Limited")
+                            .font(.footnote)
+                            .foregroundColor(.gold.opacity(0.8))
+                            .underline()
+                            .padding(.top, 20)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
                 .padding()
@@ -208,6 +212,7 @@ struct MyDetailsView: View {
         }
     }
 
+    
     private func saveDataToFirestore(data: [String: Any]) {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         let db = Firestore.firestore()
@@ -223,46 +228,24 @@ struct MyDetailsView: View {
     }
 }
 
-// MARK: - FeedbackMessage Struct
+// MARK: - Reusable Custom TextField
+struct CustomTextField: View {
+    let title: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
 
+    var body: some View {
+        TextField(title, text: $text)
+            .keyboardType(keyboardType)
+            .textFieldStyle(RoundedBorderTextFieldStyle())
+            .padding()
+            .background(Color.white) // ✅ White Background
+            .cornerRadius(10)
+            .foregroundColor(.black) // ✅ Black Text
+    }
+}
+// MARK: - FeedbackMessage Struct
 struct FeedbackMessage: Identifiable {
     let id = UUID()
     let text: String
-}
-
-// MARK: - ImagePicker for Logo
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let parent: ImagePicker
-
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
-            }
-            picker.dismiss(animated: true)
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
-        }
-    }
 }

@@ -15,7 +15,7 @@ struct PDFGeneratorView: View {
     @State private var isFaulty: Bool
     @State private var showPDFPreview = false
     @State private var generatedPDFURL: URL?
-
+    
     let reading: Reading
     let businessName: String
     let businessAddress: String
@@ -23,7 +23,7 @@ struct PDFGeneratorView: View {
     let businessNumber: String
     let businessLogoURL: String?
     let capturedImage: UIImage?
-
+    
     init(reading: Reading, businessName: String, businessAddress: String, businessEmail: String, businessNumber: String, businessLogoURL: String?, capturedImage: UIImage?) {
         self.reading = reading
         self._customTitle = State(initialValue: reading.lightReference)
@@ -41,19 +41,19 @@ struct PDFGeneratorView: View {
         self.businessLogoURL = businessLogoURL
         self.capturedImage = capturedImage
     }
-
+    
     var body: some View {
         VStack(spacing: 20) {
             Text("Customize Your PDF")
                 .font(.title)
                 .fontWeight(.bold)
                 .padding()
-
+            
             // Custom Title Input
             TextField("Title", text: $customTitle)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .padding(.horizontal)
-
+            
             // Editable Fields
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Light Reference", text: $lightReference)
@@ -65,7 +65,7 @@ struct PDFGeneratorView: View {
             }
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .padding(.horizontal)
-
+            
             Button(action: generatePDF) {
                 Text("Generate PDF")
                     .frame(maxWidth: .infinity)
@@ -75,7 +75,7 @@ struct PDFGeneratorView: View {
                     .cornerRadius(10)
             }
             .padding(.horizontal)
-
+            
             // Show Preview Button
             if let url = generatedPDFURL {
                 Button(action: { showPDFPreview = true }) {
@@ -99,7 +99,7 @@ struct PDFGeneratorView: View {
         let pdfRenderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
         let pdfData = pdfRenderer.pdfData { context in
             context.beginPage()
-
+            
             let hostingController = UIHostingController(
                 rootView: PDFContentView(
                     title: customTitle,
@@ -112,11 +112,11 @@ struct PDFGeneratorView: View {
                     capturedImage: capturedImage
                 )
             )
-
+            
             hostingController.view.bounds = context.pdfContextBounds
             hostingController.view.drawHierarchy(in: context.pdfContextBounds, afterScreenUpdates: true)
         }
-
+        
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("ReadingDetails.pdf")
         do {
             try pdfData.write(to: tempURL)
@@ -126,8 +126,8 @@ struct PDFGeneratorView: View {
             print("❌ Error saving PDF: \(error.localizedDescription)")
         }
     }
-
-
+    
+}
 
 
 

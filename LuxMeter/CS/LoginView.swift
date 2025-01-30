@@ -10,39 +10,31 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .edgesIgnoringSafeArea(.all)
+            // ✅ Fully Black Background
+            Color.black.edgesIgnoringSafeArea(.all)
 
             ScrollView {
                 VStack(spacing: 30) {
-                    // Title and Description
+                    // ✅ Title
                     Text("Welcome Back!")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.gold)
 
-                    Text("Log in to your account to continue using Lux Meter. Secure, fast, and reliable!")
+                    Text("Log in to your account to continue using Lux Meter.")
                         .font(.body)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white.opacity(0.9))
                         .padding(.horizontal, 20)
 
-                    // Email and Password Fields
+                    // ✅ Email & Password Fields
                     Group {
-                        TextField("Email", text: $email)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            .styledTextField()
+                        GoldTextField(title: "Email", text: $email, isSecure: false)
+                        GoldTextField(title: "Password", text: $password, isSecure: true)
 
-                        SecureField("Password", text: $password)
-                            .styledTextField()
                     }
 
-                    // Error Message
+                    // ✅ Error Message (if any)
                     if let errorMessage = errorMessage {
                         Text(errorMessage)
                             .foregroundColor(.red)
@@ -51,31 +43,25 @@ struct LoginView: View {
                             .padding(.horizontal, 20)
                     }
 
-                    // Login Button
+                    // ✅ Login Button
                     Button(action: login) {
                         Text("Log In")
                             .font(.headline)
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.orange, Color.pink]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .foregroundColor(.white)
+                            .background(Color.gold)
+                            .foregroundColor(.black)
                             .cornerRadius(15)
                             .shadow(radius: 10)
                             .padding(.horizontal, 40)
                     }
 
-                    // Forgot Password and Sign-Up Links
+                    // ✅ Forgot Password & Sign-Up Links
                     VStack(spacing: 5) {
                         NavigationLink(destination: ForgotPasswordView()) {
                             Text("Forgot Password?")
                                 .font(.subheadline)
-                                .foregroundColor(.white)
+                                .foregroundColor(.gold)
                                 .underline()
                         }
 
@@ -88,7 +74,7 @@ struct LoginView: View {
                                 Text("Sign Up")
                                     .font(.headline)
                                     .fontWeight(.bold)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.gold)
                             }
                         }
                     }
@@ -96,14 +82,13 @@ struct LoginView: View {
                 .padding(.top, 40)
             }
 
+            // ✅ Footer
             VStack {
                 Spacer()
-
-                // Powered By Footer
                 Link(destination: URL(string: "https://dadlink.co.uk")!) {
                     Text("Powered by DadLink Technologies Limited")
                         .font(.footnote)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.gold)
                         .underline()
                         .padding(.bottom, 20)
                 }
@@ -113,13 +98,13 @@ struct LoginView: View {
         .onAppear(perform: autoLogin)
     }
 
+    // MARK: - Auto Login
     private func autoLogin() {
         if let user = Auth.auth().currentUser, user.isEmailVerified {
-            // Check if the user exists in Firestore
             let db = Firestore.firestore()
             db.collection("users").document(user.uid).getDocument { snapshot, error in
                 if let error = error {
-                    print("Error checking user in Firestore: \(error.localizedDescription)")
+                    print("Error checking user: \(error.localizedDescription)")
                     authViewModel.isLoggedIn = false
                 } else if snapshot?.exists == true {
                     authViewModel.isLoggedIn = true
@@ -132,6 +117,7 @@ struct LoginView: View {
         }
     }
 
+    // MARK: - Login Function
     private func login() {
         guard !email.isEmpty, !password.isEmpty else {
             errorMessage = "Please fill in all fields."
@@ -158,7 +144,6 @@ struct LoginView: View {
                 return
             }
 
-            // Check if user exists in Firestore
             let db = Firestore.firestore()
             db.collection("users").document(user.uid).getDocument { snapshot, error in
                 if let error = error {
@@ -177,6 +162,37 @@ struct LoginView: View {
             }
         }
     }
-
 }
 
+struct GoldTextField: View {
+    let title: String
+    @Binding var text: String
+    let isSecure: Bool
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            // ✅ Placeholder Text
+            if text.isEmpty {
+                Text(title)
+                    .foregroundColor(.gold.opacity(0.6)) // ✅ Faded gold for placeholder
+                    .padding(.leading, 12) // ✅ Ensures correct positioning
+            }
+
+            if isSecure {
+                SecureField("", text: $text)
+                    .padding()
+                    .foregroundColor(.white)
+                    .background(RoundedRectangle(cornerRadius: 8).stroke(Color.gold, lineWidth: 2))
+                    .frame(maxWidth: 380)
+            } else {
+                TextField("", text: $text)
+                    .autocapitalization(.none)
+                    .padding()
+                    .foregroundColor(.white)
+                    .background(RoundedRectangle(cornerRadius: 8).stroke(Color.gold, lineWidth: 2))
+                    .frame(maxWidth: 380)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}

@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import PDFKit
 
 struct ReadingsView: View {
     @State private var readings: [Reading] = []
@@ -12,147 +13,107 @@ struct ReadingsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.6)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .edgesIgnoringSafeArea(.all)
+                Color.black.edgesIgnoringSafeArea(.all)
 
                 VStack(spacing: 20) {
-                    // Title and Description
-                    VStack(spacing: 10) {
-                        Text("Your Lux Readings")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                    titleSection
 
-                        Text("Explore your recorded light measurements. Tap any reading to view its details.")
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                    }
-
-                    // Readings List or Error State
                     if isLoading {
-                        ProgressView("Loading...")
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        loadingState
                     } else if let errorMessage = errorMessage {
-                        VStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 100, height: 100)
-                                .foregroundColor(.red)
-                            Text(errorMessage)
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 20)
-                        }
+                        errorState(errorMessage)
                     } else if readings.isEmpty {
-                        VStack {
-                            Image(systemName: "lightbulb")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 100, height: 100)
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("No readings available.")
-                                .font(.headline)
-                                .foregroundColor(.white.opacity(0.8))
-                                .padding(.top, 10)
-                        }
+                        emptyState
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 20) {
-                                ForEach(readings) { reading in
-                                    Button(action: {
-                                        withAnimation {
-                                            selectedReading = reading
-                                            showDetails = true
-                                        }
-                                    }) {
-                                        HStack(alignment: .top, spacing: 20) {
-                                            // Display the image using RemoteImage
-                                            if let imageUrl = reading.imageUrl, let url = URL(string: imageUrl) {
-                                                RemoteImage(url: url)
-                                                    .clipShape(Circle())
-                                                    .frame(width: 50, height: 50)
-                                            } else {
-                                                Image(systemName: "photo")
-                                                    .resizable()
-                                                    .scaledToFit()
-                                                    .frame(width: 50, height: 50)
-                                                    .foregroundColor(.gray)
-                                            }
-
-                                            // Reading details
-                                            VStack(alignment: .leading, spacing: 5) {
-                                                Text("Lux Value: \(reading.luxValue, specifier: "%.2f") lx")
-                                                    .font(.headline)
-                                                    .foregroundColor(.blue)
-
-                                                Text("Light Reference: \(reading.lightReference)")
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.white.opacity(0.8))
-
-                                                Text("Grid Location: \(reading.gridLocation)")
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.white.opacity(0.8))
-
-                                                Text(reading.timestamp, style: .date)
-                                                    .font(.caption)
-                                                    .foregroundColor(.white.opacity(0.8))
-                                            }
-
-                                            Spacer()
-                                        }
-                                        .padding()
-                                        .background(Color.black.opacity(0.4)) // Transparent background
-                                        .cornerRadius(10)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .stroke(Color.white.opacity(0.5), lineWidth: 1) // Outline
-                                        )
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
+                        readingsList
                     }
                 }
                 .padding()
-                // Details View
-                .sheet(isPresented: $showDetails) {
-                    if let reading = selectedReading {
-                        ReadingDetailsView(
-                            readingId: reading.id,
-                            readingValue: reading.luxValue,
-                            customTitle: reading.lightReference, // Pass as a plain string
-                            lightReference: .constant(reading.lightReference),
-                            gridLocation: .constant(reading.gridLocation),
-                            siteLocation: .constant(reading.siteLocation),
-                            fixtureDetails: .constant(reading.fixtureDetails),
-                            knownWattage: .constant(reading.knownWattage),
-                            notes: .constant(reading.notes),
-                            isFaulty: .constant(reading.isFaulty),
-                            capturedImage: nil, // Use nil or an appropriate UIImage
-                            imageUrl: reading.imageUrl
-                        )
-                    }
-                }
-
-
             }
-            .onAppear {
-                fetchReadings()
-            }
+            .onAppear(perform: fetchReadings)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("Readings")
         }
     }
+
+    // MARK: - Components
+
+    private var titleSection: some View {
+        VStack(spacing: 10) {
+            Text("Your Lux Readings")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(.gold)
+
+            Text("Tap any reading to view details, edit, or download as a PDF.")
+                .font(.body)
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+    }
+
+
+    private var loadingState: some View {
+        ProgressView("Loading...")
+            .progressViewStyle(CircularProgressViewStyle(tint: .gold))
+    }
+
+    private func errorState(_ message: String) -> some View {
+        VStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .foregroundColor(.red)
+
+            Text(message)
+                .font(.headline)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack {
+            Image(systemName: "lightbulb.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .foregroundColor(.white.opacity(0.8))
+
+            Text("No readings available.")
+                .font(.headline)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.top, 10)
+        }
+    }
+
+    private var readingsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 20) {
+                ForEach(readings) { reading in
+                    ReadingCardView(
+                        reading: reading,
+                        capturedImage: nil,
+                        actionHandler: { action in
+                            handleAction(action, for: reading)
+                        },
+                        displayMode: .deleteOrDownload
+                    )
+                    .padding()
+                    .background(Color.black.opacity(0.9))
+                    .cornerRadius(16)
+                    .shadow(radius: 10)
+                    .transition(.move(edge: .bottom))
+                    .animation(.spring())
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
 
     private func fetchReadings() {
         let db = Firestore.firestore()
@@ -181,9 +142,106 @@ struct ReadingsView: View {
                         knownWattage: data["knownWattage"] as? String ?? "",
                         notes: data["notes"] as? String ?? "",
                         isFaulty: data["isFaulty"] as? Bool ?? false,
-                        imageUrl: data["imageUrl"] as? String
+                        imageUrl: data["imageUrl"] as? String // ✅ Pull image URL from Firestore
                     )
                 } ?? []
             }
     }
+
+    private func handleAction(_ action: ReadingCardAction, for reading: Reading) {
+        switch action {
+        case .delete:
+            deleteReading(reading)
+        case .save:
+            saveReading(reading)
+        case .download:
+            generatePDF(for: reading)
+        case .close:
+            print("✅ Close action triggered inside ReadingCardView.")
+        }
+    }
+
+    private func saveReading(_ reading: Reading) {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("❌ Error: No authenticated user found.")
+            return
+        }
+
+        let db = Firestore.firestore()
+
+        let readingData: [String: Any] = [
+            "id": reading.id,
+            "luxValue": reading.luxValue,
+            "timestamp": FieldValue.serverTimestamp(),
+            "lightReference": reading.lightReference,
+            "gridLocation": reading.gridLocation,
+            "siteLocation": reading.siteLocation,
+            "fixtureDetails": reading.fixtureDetails,
+            "knownWattage": reading.knownWattage,
+            "notes": reading.notes,
+            "isFaulty": reading.isFaulty,
+            "imageUrl": reading.imageUrl ?? ""
+        ]
+
+        db.collection("users").document(userId).collection("readings").document(reading.id)
+            .setData(readingData, merge: true) { error in
+                if let error = error {
+                    print("❌ Error saving reading: \(error.localizedDescription)")
+                } else {
+                    print("✅ Reading saved successfully!")
+                }
+            }
+    }
+
+    private func deleteReading(_ reading: Reading) {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        let db = Firestore.firestore()
+
+        db.collection("users").document(userId).collection("readings").document(reading.id).delete { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    errorMessage = "Error deleting reading: \(error.localizedDescription)"
+                } else {
+                    withAnimation {
+                        readings.removeAll { $0.id == reading.id }
+                    }
+                    print("✅ Reading deleted successfully.")
+                }
+            }
+        }
+    }
+
+    private func generatePDF(for reading: Reading) {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+
+        let readingId = reading.id
+
+        PDFGenerator.generatePDF(reading: reading) { url in
+            DispatchQueue.main.async {
+                if let url = url {
+                    print("✅ PDF generated: \(url)")
+                    sharePDF(url)
+                } else {
+                    print("❌ Failed to generate PDF")
+                }
+            }
+        }
+    }
+
+    private func sharePDF(_ url: URL) {
+        let activityController = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            rootVC.present(activityController, animated: true, completion: nil)
+        }
+    }
+}
+
+// MARK: - Enum for Button Actions
+enum ReadingCardAction {
+    case delete
+    case save
+    case download
+    case close
 }

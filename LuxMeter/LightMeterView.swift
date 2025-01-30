@@ -5,6 +5,12 @@ import FirebaseFirestore
 import FirebaseStorage
 import PDFKit
 
+enum ReadingCardDisplayMode {
+    case spinOrDelete  // LightMeterView (pos 1)
+    case saveOrDelete  // LightMeterView (pos 2)
+    case deleteOrDownload  // ReadingsView (pos 1)
+}
+
 struct LightMeterView: View {
     @StateObject private var lightMeterManager = LightMeterManager()
     @State private var isMeasuring = false
@@ -25,38 +31,36 @@ struct LightMeterView: View {
     @State private var fixtureDetails = ""
     @State private var knownWattage = ""
     @State private var readings: [Reading] = []
+    
+    @State private var timestamp = Date()
+    @State private var lightReference = ""
 
 
-    var dynamicBackground: LinearGradient {
-        let intensity = Double(min(max(currentReading / 1000, 0.1), 1.0))
-        return LinearGradient(
-            gradient: Gradient(colors: [Color.purple.opacity(intensity), Color.blue.opacity(1 - intensity)]),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+    var dynamicBackground: some View {
+        Color.black.edgesIgnoringSafeArea(.all)
     }
 
     var body: some View {
         ZStack {
             // Dynamic Background
             dynamicBackground.edgesIgnoringSafeArea(.all)
-            
+
             VStack {
                 // Header
-                VStack {
-                    Text("Light Meter")
+                VStack(spacing: 5) {
+                    Text("Lux Meter")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                        .padding(.top, 20)
-                    
-                    Text("Measure the light intensity in lux.")
-                        .font(.subheadline)
+                        .foregroundColor(.gold)
+
+                    Text("Measure light intensity in real time")
+                        .font(.headline)
                         .foregroundColor(.gray)
                 }
-                .padding(.bottom, 30)
-                
+                .padding(.top, 30)
+
                 Spacer()
-                
+
                 // Light Measurement Display
                 if let lightLevel = lightMeterManager.lightLevel, isMeasuring {
                     Text("Light Intensity: \(String(format: "%.2f", lightLevel)) lx")
@@ -67,42 +71,47 @@ struct LightMeterView: View {
                         .foregroundColor(.white)
                         .padding(.bottom, 20)
                 }
-                
+
                 // Circle Camera Feed or Placeholder
                 ZStack {
                     Circle()
-                        .stroke(lineWidth: 3)
-                        .foregroundColor(.blue)
-                        .frame(width: 220, height: 220)
-                    
+                        .strokeBorder(Color.gold, lineWidth: 4)
+                        .frame(width: 230, height: 230)
+
                     if hasCameraPermission && isMeasuring {
                         CameraLightMeterView(session: lightMeterManager.captureSession)
                             .clipShape(Circle())
-                            .frame(width: 200, height: 200)
+                            .frame(width: 220, height: 220)
                     } else {
                         Image(systemName: "camera.fill")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 100, height: 100)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.gold.opacity(0.8))
                     }
                 }
+                .shadow(radius: 10)
                 .padding(.bottom, 40)
-                
+
                 // Start/Stop Button
                 Button(action: toggleMeasurement) {
-                    Text(isMeasuring ? "Stop" : "Start")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isMeasuring ? Color.red : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                    HStack {
+                        Image(systemName: isMeasuring ? "stop.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 22))
+                        Text(isMeasuring ? "Stop Measurement" : "Start Measurement")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isMeasuring ? Color.red : Color.gold)
+                    .foregroundColor(.black)
+                    .cornerRadius(12)
+                    .shadow(radius: 5)
                 }
                 .padding(.horizontal, 20)
-                
+
                 Spacer()
-                
+
                 // Feedback Message
                 if let message = feedbackMessage {
                     Text(message)
@@ -121,102 +130,51 @@ struct LightMeterView: View {
             .onAppear(perform: requestCameraPermission)
             .onDisappear(perform: lightMeterManager.stopMeasuring)
             .navigationBarHidden(true)
-            
+
             if showReadingDetails {
-                VStack(spacing: 16) {
-                    // Dismiss Chevron
-                    Image(systemName: "chevron.compact.down")
-                        .font(.largeTitle)
-                        .foregroundColor(.gray)
-                        .onTapGesture {
-                            withAnimation {
-                                showReadingDetails = false
-                            }
+                ReadingCardView(
+                    reading: Reading(
+                        id: UUID().uuidString,
+                        luxValue: currentReading,
+                        timestamp: timestamp,  // ✅ Always has a timestamp
+                        lightReference: lightReference.isEmpty ? "N/A" : lightReference,
+                        gridLocation: gridLocation.isEmpty ? "N/A" : gridLocation,
+                        siteLocation: siteLocation.isEmpty ? "N/A" : siteLocation,
+                        fixtureDetails: fixtureDetails.isEmpty ? "N/A" : fixtureDetails,
+                        knownWattage: knownWattage.isEmpty ? "Unknown" : knownWattage,
+                        notes: notes.isEmpty ? "No notes" : notes,
+                        isFaulty: isFaulty,
+                        imageUrl: imageUrl?.absoluteString ?? ""  // ✅ If missing, use empty string
+                    ),
+                    capturedImage: capturedImage,
+                    actionHandler: { action in
+                        switch action {
+                        case .delete:
+                            deleteLocalImage()
+                            showReadingDetails = false
+                        case .save:
+                            saveToFirebase()
+                        case .download:
+                            print("Download action triggered, but not applicable here.")
+                        case .close:  // ✅ Add this case to make the switch exhaustive
+                            showReadingDetails = false // ✅ Close the reading card
                         }
-                        .padding(.top, 20)
-                    
-                    // Reading Details Card
-                    VStack(spacing: 16) {
-                        // Display Image
-                        if let capturedImage = capturedImage {
-                            Image(uiImage: capturedImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 200, height: 200)
-                                .cornerRadius(12)
-                        } else {
-                            Image(systemName: "photo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 200, height: 200)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Editable Fields
-                            TextField("Enter Light Reference", text: $reference)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.horizontal)
-                            
-                            TextField("Enter Grid Location", text: $gridLocation)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.horizontal)
-                            
-                            TextField("Enter Site Location", text: $siteLocation)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.horizontal)
-                            
-                            TextField("Fixture Details", text: $fixtureDetails)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.horizontal)
-                            
-                            TextField("Enter Known Wattage", text: $knownWattage)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.horizontal)
-                            
-                            Toggle("Is Faulty", isOn: $isFaulty)
-                                .toggleStyle(SwitchToggleStyle(tint: .red))
-                                .padding(.horizontal)
-                            
-                            Text("Lux Value: \(String(format: "%.2f", currentReading)) lx")
-                                .font(.headline)
-                                .foregroundColor(.orange)
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.black)
-                        .padding(.bottom, 8)
-                        
-                        // Action Buttons
-                        HStack(spacing: 10) {
-                            Button("Save") {
-                                saveToFirebase()
-                                showReadingDetails = false
-                            }
-                            .buttonStyle(ActionButtonStyle(color: .green))
-                            
-                            Button("Delete") {
-                                deleteLocalImage()
-                                showReadingDetails = false
-                            }
-                            .buttonStyle(ActionButtonStyle(color: .red))
-                            
-                            Button("Convert to PDF") {
-                                convertToPDFAndSend()
-                            }
-                            .buttonStyle(ActionButtonStyle(color: .blue))
-                        }
-                        .padding(.top, 10)
-                    }
-                    .padding()
-                    .background(Color.white)
-                    .cornerRadius(20)
-                    .shadow(radius: 10)
-                    .padding()
-                }
-                .frame(maxWidth: 400)
+                    },
+
+                    displayMode: .saveOrDelete
+                )
+                .padding()
+                .background(Color.gray.opacity(0.9))
+                .cornerRadius(20)
+                .shadow(radius: 10)
+                .transition(.move(edge: .bottom))
+                .animation(.spring())
             }
+
+
         }
     }
+
     // MARK: - Functions
 
     private func requestCameraPermission() {
@@ -231,7 +189,7 @@ struct LightMeterView: View {
             }
         }
     }
-
+    
     private func toggleMeasurement() {
         if isMeasuring {
             lightMeterManager.stopMeasuring()
@@ -239,23 +197,20 @@ struct LightMeterView: View {
                 currentReading = lightLevel
                 capturedImage = lightMeterManager.captureCurrentFrame()
 
-                // Save captured image locally with UUID
                 if let capturedImage = capturedImage {
                     let uuid = UUID().uuidString
                     imageLocalUUID = uuid
                     saveImageLocally(image: capturedImage, uuid: uuid)
                 }
 
-                // Only show the details card when a valid reading is captured
-                if capturedImage != nil {
-                    withAnimation {
-                        showReadingDetails = true
-                    }
+                // ✅ Show reading card with the image
+                withAnimation {
+                    showReadingDetails = true
                 }
             }
         } else {
             lightMeterManager.startMeasuring()
-            showReadingDetails = false // Hide card when starting measurement
+            showReadingDetails = false  // Hide reading card when restarting measurement
         }
         isMeasuring.toggle()
     }
@@ -276,66 +231,80 @@ struct LightMeterView: View {
             imageLocalUUID = nil
         }
     }
+    
     private func saveToFirebase() {
         guard let userId = Auth.auth().currentUser?.uid else {
-            print("User not authenticated.")
+            print("❌ User not authenticated.")
             return
         }
 
         let db = Firestore.firestore()
-        let readingId = UUID().uuidString // Generate a unique ID for the reading
+        let readingId = UUID().uuidString
         let storageRef = Storage.storage().reference().child("users/\(userId)/readings/\(readingId).jpg")
 
         if let capturedImage = capturedImage, let imageData = capturedImage.jpegData(compressionQuality: 0.8) {
-            // Upload image to Firebase Storage
+            print("📸 Uploading Image to Firebase Storage...")
+
             storageRef.putData(imageData, metadata: nil) { _, error in
                 if let error = error {
-                    print("Error uploading image: \(error.localizedDescription)")
+                    print("❌ Error uploading image: \(error.localizedDescription)")
                     return
                 }
 
                 storageRef.downloadURL { url, error in
                     guard let downloadURL = url else {
-                        print("Failed to retrieve download URL.")
+                        print("❌ Failed to retrieve image URL.")
                         return
                     }
 
-                    // Save reading data to Firestore
-                    self.saveReadingToFirestore(userId: userId, readingId: readingId, imageUrl: downloadURL.absoluteString)
+                    print("✅ Image URL: \(downloadURL.absoluteString)")
+
+                    self.saveReadingToFirestore(
+                        userId: userId,
+                        readingId: readingId,
+                        imageUrl: downloadURL.absoluteString // ✅ Store Image URL
+                    )
                 }
             }
         } else {
-            // Save without image
-            saveReadingToFirestore(userId: userId, readingId: readingId, imageUrl: nil)
+            print("❌ No image found, skipping image upload.")
+            self.saveReadingToFirestore(userId: userId, readingId: readingId, imageUrl: nil)
         }
     }
 
     private func saveReadingToFirestore(userId: String, readingId: String, imageUrl: String?) {
         let db = Firestore.firestore()
+
         let readingData: [String: Any] = [
             "luxValue": currentReading,
             "timestamp": FieldValue.serverTimestamp(),
-            "location": gridLocation,
-            "siteLocation": siteLocation,
-            "address": address,
-            "reference": reference,
-            "fixtureDetails": fixtureDetails,
-            "knownWattage": knownWattage,
-            "notes": notes,
+            "lightReference": lightReference.isEmpty ? "N/A" : lightReference,
+            "gridLocation": gridLocation.isEmpty ? "N/A" : gridLocation,
+            "siteLocation": siteLocation.isEmpty ? "N/A" : siteLocation,
+            "fixtureDetails": fixtureDetails.isEmpty ? "N/A" : fixtureDetails,
+            "knownWattage": knownWattage.isEmpty ? "Unknown" : knownWattage,
+            "notes": notes.isEmpty ? "No notes" : notes,
             "isFaulty": isFaulty,
-            "imageUrl": imageUrl ?? ""
+            "imageUrl": imageUrl ?? ""  // ✅ Store Image URL in Firestore
         ]
 
-
-        db.collection("users").document(userId).collection("readings").document(readingId).setData(readingData) { error in
-            if let error = error {
-                print("Error saving reading to Firestore: \(error.localizedDescription)")
-            } else {
-                print("Reading successfully saved to Firestore!")
-                feedbackMessage = "Reading saved successfully!"
+        db.collection("users").document(userId).collection("readings").document(readingId)
+            .setData(readingData) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error saving reading: \(error.localizedDescription)")
+                    } else {
+                        print("✅ Reading Successfully Saved in Firestore!")
+                        feedbackMessage = "✅ Saved Successfully!"
+                        
+                        withAnimation {
+                            showReadingDetails = false  // ✅ Close the card after saving
+                        }
+                    }
+                }
             }
-        }
     }
+
 
     private func convertToPDFAndSend() {
         guard let capturedImage = capturedImage else {
@@ -403,3 +372,7 @@ struct ActionButtonStyle: ButtonStyle {
             .cornerRadius(8)
     }
 }
+extension Color {
+    static let gold = Color(red: 255/255, green: 215/255, blue: 0/255)
+}
+

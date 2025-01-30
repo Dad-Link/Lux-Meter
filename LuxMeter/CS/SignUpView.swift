@@ -1,33 +1,32 @@
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
-import FirebaseAppCheck
+import FirebaseStorage
 
 struct SignUpView: View {
     @State private var firstName = ""
     @State private var lastName = ""
-    @State private var email = ""
+    @State private var personalEmail = ""
+    @State private var businessEmail = ""
+    @State private var personalPhoneNumber = ""
+    @State private var businessPhoneNumber = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var businessLogo: UIImage? // ✅ Business Logo Upload
     @State private var errorMessage: String?
     @State private var successMessage: String?
-    @State private var isLoading = false // Loading state
+    @State private var isLoading = false
     @State private var isFormVisible = true
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.purple.opacity(0.8), Color.blue.opacity(0.6)]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).edgesIgnoringSafeArea(.all)
+            Color.black.edgesIgnoringSafeArea(.all)
 
             if isLoading {
                 ProgressView("Creating account...")
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .progressViewStyle(CircularProgressViewStyle(tint: .gold))
                     .scaleEffect(1.5)
-                    .foregroundColor(.white)
             } else if let successMessage = successMessage {
                 VStack {
                     Spacer()
@@ -35,7 +34,7 @@ struct SignUpView: View {
                         Text("Thank You!")
                             .font(.largeTitle)
                             .fontWeight(.bold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.gold)
 
                         Text(successMessage)
                             .font(.headline)
@@ -62,25 +61,29 @@ struct SignUpView: View {
                                 Text("Create an Account")
                                     .font(.largeTitle)
                                     .fontWeight(.bold)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.gold)
                                     .padding(.top, 20)
+                                    .multilineTextAlignment(.center)
 
-                                Text("Sign up to get started with Lux Meter.\nMeasure light intensity with precision and ease!")
+                                Text("Sign up to get started with Lux Meter. Measure light intensity with precision and ease!")
                                     .font(.body)
                                     .multilineTextAlignment(.center)
                                     .foregroundColor(.white.opacity(0.9))
-                                    .padding(.horizontal, 20)
+                                    .padding(.horizontal, 40)
+                                    .frame(maxWidth: 600)
 
-                                Group {
-                                    TextField("First Name", text: $firstName).styledTextField()
-                                    TextField("Last Name", text: $lastName).styledTextField()
-                                    TextField("Email", text: $email)
-                                        .autocapitalization(.none)
-                                        .keyboardType(.emailAddress)
-                                        .styledTextField()
-                                    SecureField("Password", text: $password).styledTextField()
-                                    SecureField("Confirm Password", text: $confirmPassword).styledTextField()
+                                VStack(spacing: 15) {
+                                    GoldInputField(title: "First Name", text: $firstName, isSecure: false)
+                                    GoldInputField(title: "Last Name", text: $lastName, isSecure: false)
+                                    GoldInputField(title: "Personal Email", text: $personalEmail, isSecure: false)
+                                    GoldInputField(title: "Business Email (Optional)", text: $businessEmail, isSecure: false)
+                                    GoldInputField(title: "Personal Phone Number", text: $personalPhoneNumber, isSecure: false)
+                                    GoldInputField(title: "Work Phone Number (Optional)", text: $businessPhoneNumber, isSecure: false)
+                                    GoldInputField(title: "Password", text: $password, isSecure: true)
+                                    GoldInputField(title: "Confirm Password", text: $confirmPassword, isSecure: true)
                                 }
+                                .frame(maxWidth: 420)
+                                .padding(.horizontal, 20)
 
                                 if let errorMessage = errorMessage {
                                     Text(errorMessage)
@@ -90,56 +93,18 @@ struct SignUpView: View {
                                         .padding(.horizontal, 20)
                                 }
 
-                                Button("Sign Up") {
-                                    signUp()
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.orange, Color.pink]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .foregroundColor(.white)
-                                .cornerRadius(15)
-                                .shadow(radius: 10)
-                                .padding(.horizontal, 40)
+                                GoldButton(title: "Sign Up", action: signUp)
+                                    .frame(maxWidth: 420, minHeight: 50)
+                                    .padding(.top, 10)
 
-                                // Back to Login
                                 Button("Back to Login") {
                                     presentationMode.wrappedValue.dismiss()
                                 }
                                 .font(.subheadline)
-                                .foregroundColor(.white)
-                                .padding(.top, 10)
+                                .foregroundColor(.gold)
+                                .padding(.top, 5)
                             }
-
-                            Spacer(minLength: 20)
-
-                            VStack(spacing: 10) {
-                                NavigationLink(destination: TermsOfServiceView()) {
-                                    Text("Terms and Conditions")
-                                        .font(.footnote)
-                                        .foregroundColor(.white)
-                                }
-
-                                NavigationLink(destination: PrivacyPolicyView()) {
-                                    Text("Privacy Policy")
-                                        .font(.footnote)
-                                        .foregroundColor(.white)
-                                }
-                            }
-
-                            Spacer(minLength: 10)
-
-                            Link(destination: URL(string: "https://dadlink.co.uk")!) {
-                                Text("Powered by DadLink Technologies Limited")
-                                    .font(.footnote)
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .padding(.bottom, 30)
-                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
                         }
                     }
                 }
@@ -150,13 +115,13 @@ struct SignUpView: View {
     }
 
     private func signUp() {
-        guard !firstName.isEmpty, !lastName.isEmpty, !email.isEmpty, !password.isEmpty, password == confirmPassword else {
-            errorMessage = "Please complete all fields correctly."
+        guard !firstName.isEmpty, !lastName.isEmpty, !personalEmail.isEmpty, !password.isEmpty, password == confirmPassword else {
+            errorMessage = "Please complete all required fields."
             return
         }
 
         isLoading = true
-        Auth.auth().createUser(withEmail: email, password: password) { result, error in
+        Auth.auth().createUser(withEmail: personalEmail, password: password) { result, error in
             if let error = error {
                 errorMessage = error.localizedDescription
                 isLoading = false
@@ -169,67 +134,69 @@ struct SignUpView: View {
                 return
             }
 
-            // Send verification email
+            saveUserData(user)
+
             user.sendEmailVerification { error in
                 if let error = error {
-                    errorMessage = "Failed to send verification email: \(error.localizedDescription)"
-                    isLoading = false
-                    return
+                    print("❌ Failed to send verification email: \(error.localizedDescription)")
                 }
-
-                print("Verification email successfully sent to \(self.email).")
-                saveUserData(user)
             }
         }
     }
 
     private func saveUserData(_ user: User) {
         let db = Firestore.firestore()
+        let userRef = db.collection("users").document(user.uid)
+
         let userData: [String: Any] = [
             "firstName": firstName,
             "lastName": lastName,
-            "email": user.email ?? "",
+            "personalEmail": personalEmail,
+            "businessEmail": businessEmail,
+            "personalPhoneNumber": personalPhoneNumber,
+            "businessPhoneNumber": businessPhoneNumber,
             "isEmailVerified": user.isEmailVerified,
             "createdAt": FieldValue.serverTimestamp()
         ]
 
-        db.collection("users").document(user.uid).setData(userData) { error in
+        userRef.setData(userData) { error in
             if let error = error {
                 errorMessage = "Failed to save user data: \(error.localizedDescription)"
                 isLoading = false
             } else {
-                createReadingsCollection(for: user.uid)
-                successMessage = "Thanks for your sign-up! Please head to your email to verify it, then log in to enjoy the app."
+                successMessage = "Check your email to verify your account."
                 isLoading = false
+
+                createCollections(for: user.uid)
             }
         }
     }
 
-    private func createReadingsCollection(for userId: String) {
+    private func createCollections(for userId: String) {
         let db = Firestore.firestore()
-        let placeholderReading: [String: Any] = [
-            "value": 0,
-            "unit": "lux",
-            "timestamp": FieldValue.serverTimestamp()
+        
+        // ✅ Create "grids" collection with default grid
+        let gridsRef = db.collection("users").document(userId).collection("grids")
+        let defaultGrid = [
+            "gridName": "Default Grid",
+            "description": "This is your first grid."
         ]
-
-        db.collection("users").document(userId).collection("readings").document("placeholder").setData(placeholderReading) { error in
+        gridsRef.addDocument(data: defaultGrid) { error in
             if let error = error {
-                print("Error creating readings collection: \(error.localizedDescription)")
+                print("❌ Error creating grids collection: \(error.localizedDescription)")
             } else {
-                print("Readings collection initialized successfully for user \(userId).")
+                print("✅ Grids collection created successfully.")
             }
         }
-    }
-}
 
-extension View {
-    func styledTextField() -> some View {
-        self
-            .padding()
-            .background(Color.white)
-            .cornerRadius(10)
-            .shadow(color: Color.gray.opacity(0.4), radius: 5, x: 0, y: 5)
-            .padding(.horizontal, 20)
+        // ✅ Create "readings" collection with placeholder document
+        let readingsRef = db.collection("users").document(userId).collection("readings")
+        readingsRef.document("placeholder").setData(["initialized": true]) { error in
+            if let error = error {
+                print("❌ Error initializing readings collection: \(error.localizedDescription)")
+            } else {
+                print("✅ Readings collection initialized successfully.")
+            }
+        }
     }
 }

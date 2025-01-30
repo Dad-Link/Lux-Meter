@@ -1,48 +1,34 @@
 import SwiftUI
 
 struct RemoteImage: View {
-    let url: URL
-    @State private var image: UIImage? = nil
-    @State private var isLoading = false
+    let urlString: String
+
+    @State private var loadedImage: UIImage? = nil
 
     var body: some View {
-        Group {
-            if let image = image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if isLoading {
-                ProgressView()
-                    .frame(width: 50, height: 50)
-            } else {
-                Image(systemName: "photo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 50, height: 50)
-                    .foregroundColor(.gray)
-                    .onAppear(perform: fetchImage)
-            }
+        if let loadedImage = loadedImage {
+            Image(uiImage: loadedImage)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: "photo.fill")
+                .resizable()
+                .scaledToFit()
+                .onAppear {
+                    fetchImage()
+                }
         }
-        .frame(width: 50, height: 50)
-        .clipShape(Circle())
-        .onAppear(perform: fetchImage)
     }
 
     private func fetchImage() {
-        guard !isLoading else { return }
-        isLoading = true
+        guard let imageUrl = URL(string: urlString) else { return }
 
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            isLoading = false
-            if let data = data, let fetchedImage = UIImage(data: data) {
+        DispatchQueue.global().async {
+            if let data = try? Data(contentsOf: imageUrl), let uiImage = UIImage(data: data) {
                 DispatchQueue.main.async {
-                    self.image = fetchedImage
+                    self.loadedImage = uiImage
                 }
-            } else {
-                print("Failed to fetch image: \(error?.localizedDescription ?? "Unknown error")")
             }
         }
-
-        task.resume()
     }
 }
