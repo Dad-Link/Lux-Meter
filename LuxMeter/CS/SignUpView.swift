@@ -7,16 +7,12 @@ struct SignUpView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var personalEmail = ""
-    @State private var businessEmail = ""
-    @State private var personalPhoneNumber = ""
-    @State private var businessPhoneNumber = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var businessLogo: UIImage? // ✅ Business Logo Upload
+    @State private var businessLogo: UIImage?
     @State private var errorMessage: String?
     @State private var successMessage: String?
     @State private var isLoading = false
-    @State private var isFormVisible = true
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -56,61 +52,49 @@ struct SignUpView: View {
                     VStack(spacing: 20) {
                         Spacer(minLength: 20)
 
-                        if isFormVisible {
-                            VStack(spacing: 20) {
-                                Text("Create an Account")
-                                    .font(.largeTitle)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.gold)
-                                    .padding(.top, 20)
-                                    .multilineTextAlignment(.center)
-
-                                Text("Sign up to get started with Lux Meter. Measure light intensity with precision and ease!")
-                                    .font(.body)
-                                    .multilineTextAlignment(.center)
-                                    .foregroundColor(.white.opacity(0.9))
-                                    .padding(.horizontal, 40)
-                                    .frame(maxWidth: 600)
-
-                                VStack(spacing: 15) {
-                                    GoldInputField(title: "First Name", text: $firstName, isSecure: false)
-                                    GoldInputField(title: "Last Name", text: $lastName, isSecure: false)
-                                    GoldInputField(title: "Personal Email", text: $personalEmail, isSecure: false)
-                                    GoldInputField(title: "Business Email (Optional)", text: $businessEmail, isSecure: false)
-                                    GoldInputField(title: "Personal Phone Number", text: $personalPhoneNumber, isSecure: false)
-                                    GoldInputField(title: "Work Phone Number (Optional)", text: $businessPhoneNumber, isSecure: false)
-                                    GoldInputField(title: "Password", text: $password, isSecure: true)
-                                    GoldInputField(title: "Confirm Password", text: $confirmPassword, isSecure: true)
-                                }
-                                .frame(maxWidth: 420)
-                                .padding(.horizontal, 20)
-
-                                if let errorMessage = errorMessage {
-                                    Text(errorMessage)
-                                        .foregroundColor(.red)
-                                        .font(.subheadline)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 20)
-                                }
-
-                                GoldButton(title: "Sign Up", action: signUp)
-                                    .frame(maxWidth: 420, minHeight: 50)
-                                    .padding(.top, 10)
-
-                                Button("Back to Login") {
-                                    presentationMode.wrappedValue.dismiss()
-                                }
-                                .font(.subheadline)
+                        VStack(spacing: 20) {
+                            Text("Create an Account")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
                                 .foregroundColor(.gold)
-                                .padding(.top, 5)
+                                .padding(.top, 20)
+                                .multilineTextAlignment(.center)
+
+                            VStack(spacing: 15) {
+                                GoldInputField(title: "First Name", text: $firstName, isSecure: false)
+                                GoldInputField(title: "Last Name", text: $lastName, isSecure: false)
+                                GoldInputField(title: "Email", text: $personalEmail, isSecure: false)
+                                GoldInputField(title: "Password", text: $password, isSecure: true)
+                                GoldInputField(title: "Confirm Password", text: $confirmPassword, isSecure: true)
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
+                            .frame(maxWidth: 420)
+                            .padding(.horizontal, 20)
+
+                            if let errorMessage = errorMessage {
+                                Text(errorMessage)
+                                    .foregroundColor(.red)
+                                    .font(.subheadline)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 20)
+                            }
+
+                            GoldButton(title: "Sign Up", action: signUp)
+                                .frame(maxWidth: 420, minHeight: 50)
+                                .padding(.top, 10)
+
+                            Button("Back to Login") {
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.gold)
+                            .padding(.top, 5)
                         }
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }
         }
-        .animation(.easeInOut, value: isFormVisible)
+        .animation(.easeInOut, value: isLoading)
         .navigationBarHidden(true)
     }
 
@@ -134,13 +118,17 @@ struct SignUpView: View {
                 return
             }
 
-            saveUserData(user)
-
+            // ✅ Send verification email
             user.sendEmailVerification { error in
                 if let error = error {
                     print("❌ Failed to send verification email: \(error.localizedDescription)")
+                } else {
+                    print("✅ Verification email sent to \(user.email ?? "unknown email")")
                 }
             }
+
+            // ✅ Save user data in Firestore
+            saveUserData(user)
         }
     }
 
@@ -148,55 +136,146 @@ struct SignUpView: View {
         let db = Firestore.firestore()
         let userRef = db.collection("users").document(user.uid)
 
-        let userData: [String: Any] = [
+        var userData: [String: Any] = [
             "firstName": firstName,
             "lastName": lastName,
             "personalEmail": personalEmail,
-            "businessEmail": businessEmail,
-            "personalPhoneNumber": personalPhoneNumber,
-            "businessPhoneNumber": businessPhoneNumber,
             "isEmailVerified": user.isEmailVerified,
-            "createdAt": FieldValue.serverTimestamp()
+            "createdAt": FieldValue.serverTimestamp(),
+            "businessName": "Doe Electricals",
+            "businessAddress": "123 Street, City",
+            "businessEmail": "contact@doeelectricals.com",
+            "businessNumber": "+44 123 456 789",
+            "businessLogoUrl": "",
+            "settings": [
+                "darkMode": true,
+                "notificationsEnabled": true
+            ]
         ]
 
-        userRef.setData(userData) { error in
+        userRef.setData(userData, merge: true) { error in
             if let error = error {
                 errorMessage = "Failed to save user data: \(error.localizedDescription)"
                 isLoading = false
-            } else {
-                successMessage = "Check your email to verify your account."
-                isLoading = false
-
-                createCollections(for: user.uid)
+                return
             }
+
+            print("✅ User data saved successfully.")
+
+            // ✅ Create storage files immediately
+            createStorageFiles(for: user.uid)
+
+            // ✅ Create Firestore subcollections
+            createCollections(for: user.uid)
+        }
+    }
+
+
+    private func uploadBusinessLogo(user: User) {
+        guard let businessLogo = businessLogo, let imageData = businessLogo.jpegData(compressionQuality: 0.8) else {
+            print("⚠️ No business logo provided, skipping upload.")
+            createCollections(for: user.uid)
+            return
+        }
+
+        let storageRef = Storage.storage().reference().child("users/\(user.uid)/businessLogo.jpg")
+
+        storageRef.putData(imageData, metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to upload business logo: \(error.localizedDescription)")
+            } else {
+                storageRef.downloadURL { url, error in
+                    if let url = url {
+                        Firestore.firestore().collection("users").document(user.uid).updateData(["businessLogoUrl": url.absoluteString])
+                        print("✅ Business logo uploaded successfully.")
+                    }
+                }
+            }
+            createCollections(for: user.uid)
         }
     }
 
     private func createCollections(for userId: String) {
         let db = Firestore.firestore()
-        
-        // ✅ Create "grids" collection with default grid
-        let gridsRef = db.collection("users").document(userId).collection("grids")
-        let defaultGrid = [
-            "gridName": "Default Grid",
-            "description": "This is your first grid."
-        ]
-        gridsRef.addDocument(data: defaultGrid) { error in
-            if let error = error {
-                print("❌ Error creating grids collection: \(error.localizedDescription)")
-            } else {
-                print("✅ Grids collection created successfully.")
-            }
-        }
+        let userRef = db.collection("users").document(userId)
 
-        // ✅ Create "readings" collection with placeholder document
-        let readingsRef = db.collection("users").document(userId).collection("readings")
-        readingsRef.document("placeholder").setData(["initialized": true]) { error in
+        let gridsRef = userRef.collection("grids").document("default")
+        let readingsRef = userRef.collection("readings").document("placeholder")
+
+        let batch = db.batch()
+
+        batch.setData(["gridName": "Default Grid", "description": "This is your first grid."], forDocument: gridsRef)
+        batch.setData([
+            "luxValue": 350,
+            "timestamp": FieldValue.serverTimestamp(),
+            "lightReference": "Room 1",
+            "gridLocation": "Top Left",
+            "siteLocation": "Warehouse A",
+            "fixtureDetails": "LED 40W",
+            "knownWattage": "40W",
+            "notes": "No issues",
+            "isFaulty": false,
+            "imageUrl": ""
+        ], forDocument: readingsRef)
+
+        batch.commit { error in
             if let error = error {
-                print("❌ Error initializing readings collection: \(error.localizedDescription)")
+                errorMessage = "Error creating user collections: \(error.localizedDescription)"
+                isLoading = false
             } else {
-                print("✅ Readings collection initialized successfully.")
+                print("✅ Collections created successfully.")
+                DispatchQueue.main.async {
+                    successMessage = "Check your email to verify your account."
+                    isLoading = false
+                }
             }
         }
     }
+    
+    private func createStorageFiles(for userId: String) {
+        let storageRef = Storage.storage().reference()
+
+        // ✅ Create Business Logo File
+        let businessLogoRef = storageRef.child("users/\(userId)/businessLogos/businessLogo.jpg")
+        businessLogoRef.putData(Data(), metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to create Business Logo file: \(error.localizedDescription)")
+            } else {
+                print("✅ Successfully created empty Business Logo file for user: \(userId)")
+            }
+        }
+
+        // ✅ Create Placeholder Reading Image
+        let readingId = "placeholder" // Default placeholder image ID
+        let readingRef = storageRef.child("users/\(userId)/readings/\(readingId).jpg")
+        readingRef.putData(Data(), metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to create Reading Image file: \(error.localizedDescription)")
+            } else {
+                print("✅ Successfully created empty Reading Image file for user: \(userId)")
+            }
+        }
+
+        // ✅ Create Placeholder Grid PDF
+        let gridId = "placeholder" // Default grid ID
+        let gridPDFRef = storageRef.child("users/\(userId)/grids/\(gridId)/PDF/placeholder.pdf")
+        gridPDFRef.putData(Data(), metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to create Grid PDF file: \(error.localizedDescription)")
+            } else {
+                print("✅ Successfully created empty Grid PDF file for user: \(userId)")
+            }
+        }
+
+        // ✅ Create Placeholder Reading PDF
+        let readingPDFRef = storageRef.child("users/\(userId)/readings/\(readingId)/PDF/placeholder.pdf")
+        readingPDFRef.putData(Data(), metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to create Reading PDF file: \(error.localizedDescription)")
+            } else {
+                print("✅ Successfully created empty Reading PDF file for user: \(userId)")
+            }
+        }
+    }
+
 }

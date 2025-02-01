@@ -116,18 +116,24 @@ class LightMeterManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
 
     func captureCurrentFrame() -> UIImage? {
         guard let pixelBuffer = currentPixelBuffer else {
-            print("No pixel buffer available for capture.")
+            print("❌ No pixel buffer available for capture.")
             return nil
         }
+
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext()
+        
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            print("Failed to create CGImage from CIImage.")
+            print("❌ Failed to create CGImage from CIImage.")
             return nil
         }
-        print("Image successfully captured.")
-        return UIImage(cgImage: cgImage)
+        
+        let capturedImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right) // Ensure proper orientation
+        print("📸 Image successfully captured.")
+        
+        return capturedImage
     }
+
 
     private func defaultCamera() -> AVCaptureDevice? {
         return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)

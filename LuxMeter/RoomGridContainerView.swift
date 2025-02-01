@@ -1,59 +1,80 @@
 import SwiftUI
-import Firebase
-import FirebaseAuth
 import FirebaseFirestore
-import FirebaseStorage
-import SceneKit
+import FirebaseAuth
 
 struct RoomGridContainerView: View {
-    @State private var is3DView = false // 🔥 Toggle between 2D & 3D view
-    @State private var luxGrid: [[LuxCell]] = Array(
-        repeating: Array(repeating: LuxCell(), count: 8),
-        count: 20
-    )
-
+    var gridId: String // Changed from mapId to gridId
+    @State private var luxGrid: [[LuxCell]] = []
+    @State private var is3DView: Bool = false
+    @State private var gridName : String = ""
+    
     var body: some View {
-        VStack {
-            // 🔥 Header (Hide Toggle in Room View)
-            HStack {
-                Text(is3DView ? "Heatmap 3D View" : "Room Map")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.gold)
-
-                Spacer()
-
-                // ✅ Show Toggle **ONLY** when in 3D View
-                if is3DView {
-                    Toggle("Back to Room", isOn: $is3DView)
-                        .toggleStyle(SwitchToggleStyle(tint: .gold))
-                        .labelsHidden()
-                        .padding()
-                        .transition(.opacity) // Smooth transition
-                        .animation(.easeInOut)
+        ZStack{
+            HeatmapBackgroundView()
+            VStack{
+                HStack{
+                    Text(gridName) // This can be loaded from firestore by the gridId
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.gold)
+                    Spacer()
+                }
+                .padding(.bottom)
+                if is3DView{
+                    Heatmap3DView(luxGrid: luxGrid.map { row in row.compactMap { $0.luxValue ?? 0}})
+                } else{
+                    RoomGridView(luxGrid: $luxGrid, is3DView: $is3DView, mapId: gridId)
                 }
             }
-            .padding(.horizontal)
-
-            // 🔄 Conditional View: 2D Grid OR 3D Heatmap
-            if is3DView {
-                // ✅ Show 3D View with toggle visible
-                Heatmap3DView(luxGrid: luxGrid.map { $0.map { $0.luxValue ?? 0 } }) // Convert LuxCell to Int
-                    .transition(.opacity)
-                    .animation(.easeInOut)
-            } else {
-                // ✅ Show 2D Grid, hiding the toggle
-                RoomGridView(luxGrid: $luxGrid, is3DView: $is3DView)
-                    .transition(.opacity)
-                    .animation(.easeInOut)
+            .onAppear{
+                loadGrid()
             }
         }
-        .background(Color.black.edgesIgnoringSafeArea(.all))
+        .navigationBarHidden(true)
     }
-}
-
-// 🔥 LuxCell Model
-struct LuxCell {
-    var luxValue: Int? = nil
-    var lightReference: String? = nil
+    
+    func loadGrid(){
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("User not authenticated.")
+            return
+        }
+        
+        let db = Firestore.firestore()
+        db.collection("users").document(userId).collection("grids").document(gridId).getDocument(source: .default){ (document, error) in
+            if let error = error {
+                print("Failed to get data, \(error)")
+                return
+            }
+            guard let document = document, document.exists else {
+                print("Document does not exist")
+                return
+            }
+            let data = document.data()
+           
+            
+            if let fetchedGridName = data?["name"] as? String, let gridData = data?["gridData"] as? [[Int?]], let lightReferenceData = data?["lightReferenceData"] as? [[String?]] {
+                self.gridName = fetchedGridName
+                var newGrid: [[LuxCell]] = []
+                
+                for (rowIndex, row) in gridData.enumerated(){
+                    var newRow: [LuxCell] = []
+                    for (colIndex, lux) in row.enumerated(){
+                        var newCell = LuxCell()
+                        newCell.luxValue = lux
+                        if let lightReference = lightReferenceData[rowIndex][colIndex] {
+                            newCell.lightReference = lightReference
+                        }
+                        newRow.append(newCell)
+                    }
+                    newGrid.append(newRow)
+                }
+                self.luxGrid = newGrid
+            } else {
+                self.luxGrid = Array(
+                    repeating: Array(repeating: LuxCell(), count: 8),
+                   count: 20
+                )
+            }
+        }
+    }
 }

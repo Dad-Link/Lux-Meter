@@ -6,9 +6,9 @@ import FirebaseStorage
 import PDFKit
 
 enum ReadingCardDisplayMode {
-    case spinOrDelete  // LightMeterView (pos 1)
-    case saveOrDelete  // LightMeterView (pos 2)
-    case deleteOrDownload  // ReadingsView (pos 1)
+    case spinOrDelete // LightMeterView (pos 1)
+    case saveOrDelete // LightMeterView (pos 2)
+    case deleteOrDownload // ReadingsView (pos 1)
 }
 
 struct LightMeterView: View {
@@ -17,24 +17,9 @@ struct LightMeterView: View {
     @State private var hasCameraPermission = false
     @State private var showReadingDetails = false
     @State private var currentReading: Float = 0.0
-    @State private var location = ""
-    @State private var address = ""
-    @State private var reference = ""
-    @State private var notes = ""
-    @State private var isFaulty = false
-    @State private var capturedImage: UIImage?
-    @State private var imageLocalUUID: String?
     @State private var feedbackMessage: String?
-    @State private var imageUrl: URL?
-    @State private var gridLocation = ""
-    @State private var siteLocation = ""
-    @State private var fixtureDetails = ""
-    @State private var knownWattage = ""
-    @State private var readings: [Reading] = []
-    
-    @State private var timestamp = Date()
-    @State private var lightReference = ""
-
+    @State private var capturedImage: UIImage?
+    @State private var reading: Reading?
 
     var dynamicBackground: some View {
         Color.black.edgesIgnoringSafeArea(.all)
@@ -131,36 +116,30 @@ struct LightMeterView: View {
             .onDisappear(perform: lightMeterManager.stopMeasuring)
             .navigationBarHidden(true)
 
-            if showReadingDetails {
+            if showReadingDetails, let reading = reading, let image = capturedImage {
                 ReadingCardView(
-                    reading: Reading(
-                        id: UUID().uuidString,
-                        luxValue: currentReading,
-                        timestamp: timestamp,  // ✅ Always has a timestamp
-                        lightReference: lightReference.isEmpty ? "N/A" : lightReference,
-                        gridLocation: gridLocation.isEmpty ? "N/A" : gridLocation,
-                        siteLocation: siteLocation.isEmpty ? "N/A" : siteLocation,
-                        fixtureDetails: fixtureDetails.isEmpty ? "N/A" : fixtureDetails,
-                        knownWattage: knownWattage.isEmpty ? "Unknown" : knownWattage,
-                        notes: notes.isEmpty ? "No notes" : notes,
-                        isFaulty: isFaulty,
-                        imageUrl: imageUrl?.absoluteString ?? ""  // ✅ If missing, use empty string
-                    ),
-                    capturedImage: capturedImage,
+                    reading: reading,
+                    capturedImage: image,
                     actionHandler: { action in
                         switch action {
                         case .delete:
-                            deleteLocalImage()
+                            print("🗑️ Delete button pressed")
+                            deleteLocalImage(id: reading.id)
                             showReadingDetails = false
                         case .save:
-                            saveToFirebase()
+                            print("✅ Save button pressed - Calling saveToFirebase()")
+
+                            Task {
+                                await saveToFirebase(reading: reading)
+                            }
+                            showReadingDetails = false
                         case .download:
-                            print("Download action triggered, but not applicable here.")
-                        case .close:  // ✅ Add this case to make the switch exhaustive
-                            showReadingDetails = false // ✅ Close the reading card
+                            print("⬇️ Download button pressed")
+                        case .close:
+                            print("❌ Close button pressed")
+                            showReadingDetails = false
                         }
                     },
-
                     displayMode: .saveOrDelete
                 )
                 .padding()
@@ -170,8 +149,6 @@ struct LightMeterView: View {
                 .transition(.move(edge: .bottom))
                 .animation(.spring())
             }
-
-
         }
     }
 
@@ -189,176 +166,133 @@ struct LightMeterView: View {
             }
         }
     }
-    
-    private func toggleMeasurement() {
-        if isMeasuring {
-            lightMeterManager.stopMeasuring()
-            if let lightLevel = lightMeterManager.lightLevel {
+
+      private func toggleMeasurement() {
+         if isMeasuring {
+             // Stop Measurement & Capture Data
+             lightMeterManager.stopMeasuring()
+             
+            if let lightLevel = lightMeterManager.lightLevel, let image = lightMeterManager.captureCurrentFrame() {
                 currentReading = lightLevel
-                capturedImage = lightMeterManager.captureCurrentFrame()
-
-                if let capturedImage = capturedImage {
-                    let uuid = UUID().uuidString
-                    imageLocalUUID = uuid
-                    saveImageLocally(image: capturedImage, uuid: uuid)
-                }
-
-                // ✅ Show reading card with the image
-                withAnimation {
-                    showReadingDetails = true
-                }
-            }
+                self.capturedImage = image // Update capturedImage first
+                let uuid = UUID().uuidString
+                
+               
+                 let fileURL = saveImageLocally(image: image, uuid: uuid)
+                                  
+                 self.reading = Reading(
+                    id: uuid,
+                    luxValue: currentReading,
+                    timestamp: Date(),
+                    lightReference: "N/A",
+                    gridLocation: "N/A",
+                    siteLocation: "N/A",
+                    fixtureDetails: "N/A",
+                    knownWattage: "Unknown",
+                    notes: "No notes",
+                    isFaulty: false,
+                    imageUrl: fileURL.path
+                )
+                
+                 print("📸 Image captured and saved locally with path: \(fileURL.path)")
+            } else {
+               
+               self.reading = Reading(
+                    id: UUID().uuidString,
+                    luxValue: 0,
+                    timestamp: Date(),
+                    lightReference: "N/A",
+                    gridLocation: "N/A",
+                    siteLocation: "N/A",
+                    fixtureDetails: "N/A",
+                    knownWattage: "Unknown",
+                    notes: "No notes",
+                    isFaulty: false,
+                   imageUrl: ""
+                )
+           }
+             showReadingDetails = true // Show the card after capturing
         } else {
+            // Start Measurement
             lightMeterManager.startMeasuring()
-            showReadingDetails = false  // Hide reading card when restarting measurement
+            capturedImage = nil
+            reading = nil
+            
         }
-        isMeasuring.toggle()
-    }
+         isMeasuring.toggle()
+     }
 
-
-    private func saveImageLocally(image: UIImage, uuid: String) {
+     
+    private func saveImageLocally(image: UIImage, uuid: String) -> URL {
         if let imageData = image.jpegData(compressionQuality: 0.8) {
             let fileURL = getDocumentsDirectory().appendingPathComponent("\(uuid).jpg")
             try? imageData.write(to: fileURL)
+            print("💾 Image saved locally to: \(fileURL.path)")
+            return fileURL
         }
-    }
-
-    private func deleteLocalImage() {
-        if let uuid = imageLocalUUID {
-            let fileURL = getDocumentsDirectory().appendingPathComponent("\(uuid).jpg")
-            try? FileManager.default.removeItem(at: fileURL)
-            capturedImage = nil
-            imageLocalUUID = nil
-        }
+      return getDocumentsDirectory()
     }
     
-    private func saveToFirebase() {
+    private func deleteLocalImage(id:String) {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("\(id).jpg")
+        try? FileManager.default.removeItem(at: fileURL)
+        capturedImage = nil
+        print("🗑️ Local image deleted from: \(fileURL.path)")
+        
+    }
+
+    private func saveToFirebase(reading: Reading) async {
         guard let userId = Auth.auth().currentUser?.uid else {
             print("❌ User not authenticated.")
+            feedbackMessage = "❌ User not authenticated."
             return
         }
-
-        let db = Firestore.firestore()
-        let readingId = UUID().uuidString
-        let storageRef = Storage.storage().reference().child("users/\(userId)/readings/\(readingId).jpg")
-
-        if let capturedImage = capturedImage, let imageData = capturedImage.jpegData(compressionQuality: 0.8) {
-            print("📸 Uploading Image to Firebase Storage...")
-
-            storageRef.putData(imageData, metadata: nil) { _, error in
-                if let error = error {
-                    print("❌ Error uploading image: \(error.localizedDescription)")
-                    return
-                }
-
-                storageRef.downloadURL { url, error in
-                    guard let downloadURL = url else {
-                        print("❌ Failed to retrieve image URL.")
-                        return
-                    }
-
-                    print("✅ Image URL: \(downloadURL.absoluteString)")
-
-                    self.saveReadingToFirestore(
-                        userId: userId,
-                        readingId: readingId,
-                        imageUrl: downloadURL.absoluteString // ✅ Store Image URL
-                    )
-                }
-            }
-        } else {
-            print("❌ No image found, skipping image upload.")
-            self.saveReadingToFirestore(userId: userId, readingId: readingId, imageUrl: nil)
-        }
+         await saveReadingToFirestore(userId: userId, reading: reading)
     }
 
-    private func saveReadingToFirestore(userId: String, readingId: String, imageUrl: String?) {
-        let db = Firestore.firestore()
 
+
+    private func saveReadingToFirestore(userId: String, reading: Reading) async {
+        let db = Firestore.firestore()
         let readingData: [String: Any] = [
-            "luxValue": currentReading,
+            "id": reading.id,
+            "luxValue": reading.luxValue,
             "timestamp": FieldValue.serverTimestamp(),
-            "lightReference": lightReference.isEmpty ? "N/A" : lightReference,
-            "gridLocation": gridLocation.isEmpty ? "N/A" : gridLocation,
-            "siteLocation": siteLocation.isEmpty ? "N/A" : siteLocation,
-            "fixtureDetails": fixtureDetails.isEmpty ? "N/A" : fixtureDetails,
-            "knownWattage": knownWattage.isEmpty ? "Unknown" : knownWattage,
-            "notes": notes.isEmpty ? "No notes" : notes,
-            "isFaulty": isFaulty,
-            "imageUrl": imageUrl ?? ""  // ✅ Store Image URL in Firestore
+            "lightReference": reading.lightReference,
+            "gridLocation": reading.gridLocation,
+            "siteLocation": reading.siteLocation,
+            "fixtureDetails": reading.fixtureDetails,
+            "knownWattage": reading.knownWattage,
+            "notes": reading.notes,
+            "isFaulty": reading.isFaulty,
+            "imageUrl": reading.imageUrl
         ]
-
-        db.collection("users").document(userId).collection("readings").document(readingId)
-            .setData(readingData) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("❌ Error saving reading: \(error.localizedDescription)")
-                    } else {
-                        print("✅ Reading Successfully Saved in Firestore!")
-                        feedbackMessage = "✅ Saved Successfully!"
-                        
-                        withAnimation {
-                            showReadingDetails = false  // ✅ Close the card after saving
-                        }
-                    }
-                }
-            }
-    }
-
-
-    private func convertToPDFAndSend() {
-        guard let capturedImage = capturedImage else {
-            feedbackMessage = "No image available to convert to PDF!"
-            return
-        }
-
-        // Create a PDFDocument
-        let pdfDocument = PDFDocument()
-
-        // Add the captured image as a PDF page
-        if let pdfPage = PDFPage(image: capturedImage) {
-            pdfDocument.insert(pdfPage, at: 0)
-        } else {
-            feedbackMessage = "Failed to create PDF page from the image."
-            return
-        }
-
-        // Save the PDF locally
-        let fileURL = getDocumentsDirectory().appendingPathComponent("LightMeterReading.pdf")
+        print("🚀 Saving data to Firestore with image URL: \(reading.imageUrl)")
         do {
-            if pdfDocument.write(to: fileURL) {
-                feedbackMessage = "PDF created and saved locally at \(fileURL.path)"
-                sharePDF(fileURL)
-            } else {
-                feedbackMessage = "Failed to save the PDF file."
-            }
+            try await db.collection("users").document(userId).collection("readings").document(reading.id)
+                .setData(readingData, merge: true)
+           
+            print("✅ Firestore save successful with Image URL!")
         } catch {
-            feedbackMessage = "Error while saving PDF: \(error.localizedDescription)"
+            print("❌ Firestore save failed: \(error.localizedDescription)")
+            
         }
     }
 
-    // MARK: - Share PDF
-    private func sharePDF(_ fileURL: URL) {
-        // Present the system share sheet to share the PDF
-        let activityViewController = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityViewController, animated: true, completion: nil)
+
+    func captureViewImage(_ view: UIView) -> UIImage? {
+        let renderer = UIGraphicsImageRenderer(size: view.bounds.size)
+        return renderer.image { context in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
         }
     }
-    private func formattedTimestamp() -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: Date())
-    }
+
 
     // MARK: - Get Documents Directory
     private func getDocumentsDirectory() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     }
 }
-
 // Custom Button Style
 struct ActionButtonStyle: ButtonStyle {
     let color: Color
@@ -375,4 +309,3 @@ struct ActionButtonStyle: ButtonStyle {
 extension Color {
     static let gold = Color(red: 255/255, green: 215/255, blue: 0/255)
 }
-

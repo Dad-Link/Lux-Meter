@@ -24,7 +24,7 @@ struct MainTabView: View {
                 }
 
             // Map/Grid Tab
-            RoomGridContainerView()
+            GridPlanView()
                 .tabItem {
                     Label("Map", systemImage: "map.fill")
                         .foregroundColor(.gold)
