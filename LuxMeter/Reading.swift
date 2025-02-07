@@ -12,6 +12,8 @@ struct Reading: Identifiable {
     var notes: String
     var isFaulty: Bool
     var imageUrl: String? // ✅ Change this to an Optional
+    var localImagePath: String? // ✅ Change this to an Optional
+
 }
 
 

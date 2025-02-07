@@ -17,13 +17,17 @@ struct MyDetailsView: View {
     @State private var feedbackMessage: FeedbackMessage?
     @State private var showImagePicker = false
 
+    private let logoFilename = "businessLogo.jpg" // ✅ File name for local storage
+    @Environment(\.presentationMode) var presentationMode // ✅ Controls navigation
+
+
     var body: some View {
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all) // Set Background Color
+            Color.black.edgesIgnoringSafeArea(.all) // Background
 
             ScrollView {
                 VStack(spacing: 20) {
-                    // Logo at the top
+                    // ✅ Logo at the top
                     VStack {
                         if let logo = businessLogo {
                             Image(uiImage: logo)
@@ -51,7 +55,7 @@ struct MyDetailsView: View {
                     }
                     .padding(.top)
 
-                    // Title and Description
+                    // ✅ Title and Description
                     VStack(spacing: 5) {
                         Text("My Details")
                             .font(.largeTitle)
@@ -65,7 +69,7 @@ struct MyDetailsView: View {
                             .padding(.horizontal)
                     }
 
-                    // Form for details
+                    // ✅ Form for user details
                     VStack(spacing: 15) {
                         Group {
                             CustomTextField(title: "First Name", text: $firstName)
@@ -84,7 +88,7 @@ struct MyDetailsView: View {
                     }
                     .padding(.horizontal)
 
-                    // Save Button
+                    // ✅ Save Button
                     Button(action: saveDetailsToFirebase) {
                         Text("Save Changes")
                             .fontWeight(.bold)
@@ -96,8 +100,18 @@ struct MyDetailsView: View {
                             .shadow(radius: 5)
                             .padding(.horizontal)
                     }
+                    
+                    Button(action: logout) {
+                        Text("Logout")
+                            .fontWeight(.bold)
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .shadow(radius: 5)
+                    }
 
-                    // Powered By Footer
+                    // ✅ Powered By Footer
                     Link(destination: URL(string: "https://dadlink.co.uk")!) {
                         Text("Powered by DadLink Technologies Limited")
                             .font(.footnote)
@@ -117,16 +131,25 @@ struct MyDetailsView: View {
         }
         .navigationTitle("My Details")
         .sheet(isPresented: $showImagePicker) {
-            ImagePicker(image: $businessLogo)
+            ImagePicker(image: $businessLogo, onImagePicked: saveBusinessLogoLocally) // ✅ Save locally
         }
         .onAppear(perform: fetchDetailsFromFirebase)
         .alert(item: $feedbackMessage) { message in
             Alert(title: Text("Info"), message: Text(message.text), dismissButton: .default(Text("OK")))
         }
     }
+    
+    // ✅ Logout Function
+    private func logout() {
+        do {
+            try Auth.auth().signOut()
+            presentationMode.wrappedValue.dismiss() // ✅ Navigate back to LoginView
+        } catch {
+            feedbackMessage = FeedbackMessage(text: "Failed to log out.")
+        }
+    }
 
-    // MARK: - Fetch User Details
-
+    // ✅ Fetch User Details (From Firebase or Local)
     private func fetchDetailsFromFirebase() {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         let db = Firestore.firestore()
@@ -142,10 +165,11 @@ struct MyDetailsView: View {
                 businessEmail = document.data()?["businessEmail"] as? String ?? ""
                 businessNumber = document.data()?["businessNumber"] as? String ?? ""
                 personalEmail = document.data()?["personalEmail"] as? String ?? ""
-                downloadedPDFs = document.data()?["downloadedPDFs"] as? [String] ?? []
 
                 if let logoUrl = document.data()?["businessLogo"] as? String {
                     fetchBusinessLogo(from: logoUrl)
+                } else {
+                    loadBusinessLogoLocally() // ✅ Load from device
                 }
             } else {
                 feedbackMessage = FeedbackMessage(text: "Failed to load details.")
@@ -153,23 +177,45 @@ struct MyDetailsView: View {
         }
     }
 
+    // ✅ Fetch Business Logo from Firebase (If Needed)
     private func fetchBusinessLogo(from url: String) {
         guard let logoUrl = URL(string: url) else { return }
         URLSession.shared.dataTask(with: logoUrl) { data, _, _ in
             if let data = data {
                 DispatchQueue.main.async {
                     businessLogo = UIImage(data: data)
+                    saveBusinessLogoLocally(image: businessLogo!) // ✅ Save locally
                 }
             }
         }.resume()
     }
 
-    // MARK: - Save User Details
+    // ✅ Save Business Logo Locally
+    private func saveBusinessLogoLocally(image: UIImage) {
+        if let data = image.jpegData(compressionQuality: 0.8),
+           let url = getLocalLogoURL() {
+            try? data.write(to: url, options: .atomic)
+            businessLogo = image
+        }
+    }
 
+    // ✅ Load Business Logo from Device
+    private func loadBusinessLogoLocally() {
+        if let url = getLocalLogoURL(),
+           let data = try? Data(contentsOf: url) {
+            businessLogo = UIImage(data: data)
+        }
+    }
+
+    // ✅ Get File URL for Local Logo Storage
+    private func getLocalLogoURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(logoFilename)
+    }
+
+    // ✅ Save Details to Firebase
     private func saveDetailsToFirebase() {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         let db = Firestore.firestore()
-        let storage = Storage.storage().reference()
 
         var data: [String: Any] = [
             "firstName": firstName,
@@ -179,54 +225,18 @@ struct MyDetailsView: View {
             "businessEmail": businessEmail,
             "businessNumber": businessNumber,
             "personalEmail": personalEmail,
-            "createdAt": FieldValue.serverTimestamp(),
-            "downloadedPDFs": downloadedPDFs
+            "createdAt": FieldValue.serverTimestamp()
         ]
 
         isLoading = true
 
-        if let logo = businessLogo, let imageData = logo.jpegData(compressionQuality: 0.8) {
-            let logoRef = storage.child("users/\(userId)/businessLogo.jpg")
-            logoRef.putData(imageData, metadata: nil) { _, error in
-                if let error = error {
-                    feedbackMessage = FeedbackMessage(text: "Failed to upload logo: \(error.localizedDescription)")
-                    isLoading = false
-                    return
-                }
-
-                logoRef.downloadURL { url, error in
-                    if let error = error {
-                        feedbackMessage = FeedbackMessage(text: "Failed to fetch logo URL: \(error.localizedDescription)")
-                        isLoading = false
-                        return
-                    }
-
-                    if let url = url {
-                        data["businessLogo"] = url.absoluteString
-                        saveDataToFirestore(data: data)
-                    }
-                }
-            }
-        } else {
-            saveDataToFirestore(data: data)
-        }
-    }
-
-    
-    private func saveDataToFirestore(data: [String: Any]) {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-
         db.collection("users").document(userId).setData(data, merge: true) { error in
             isLoading = false
-            if let error = error {
-                feedbackMessage = FeedbackMessage(text: "Failed to save details: \(error.localizedDescription)")
-            } else {
-                feedbackMessage = FeedbackMessage(text: "Details saved successfully!")
-            }
+            feedbackMessage = error == nil ? FeedbackMessage(text: "Details saved!") : FeedbackMessage(text: "Failed to save.")
         }
     }
 }
+
 
 // MARK: - Reusable Custom TextField
 struct CustomTextField: View {

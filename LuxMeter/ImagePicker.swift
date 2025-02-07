@@ -1,11 +1,9 @@
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
-import FirebaseStorage
-
+import UIKit
 
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
+    var onImagePicked: ((UIImage) -> Void)? // ✅ Callback for saving the image
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -27,8 +25,9 @@ struct ImagePicker: UIViewControllerRepresentable {
         }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
+            if let selectedImage = info[.originalImage] as? UIImage {
+                parent.image = selectedImage
+                parent.onImagePicked?(selectedImage) // ✅ Call the onImagePicked function
             }
             picker.dismiss(animated: true)
         }

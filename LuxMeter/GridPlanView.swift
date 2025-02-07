@@ -1,171 +1,157 @@
 import SwiftUI
-import FirebaseFirestore
-import FirebaseAuth
 
 struct GridPlanView: View {
     @State private var showCreateGrid: Bool = false
     @State private var grids: [Grid] = []
-    @State private var listener: ListenerRegistration? = nil // Added listener
     
     var body: some View {
-        NavigationStack{
-            ZStack{
-                HeatmapBackgroundView()
+        NavigationStack {
+            ZStack {
+                Color.black.edgesIgnoringSafeArea(.all) // ✅ Matte black background
+
                 VStack {
-                    HStack {
-                        Text("Your Saved Grids")
+                    // Title & Description
+                    VStack(spacing: 8) {
+                        Text("Grid Planner")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.gold)
-                        Spacer()
-                        Button(action: { showCreateGrid.toggle() }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.gold)
-                        }
+
+                        Text("Create and manage grids to build your Lux & Heat Map.")
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 30)
                     }
-                    .padding()
+                    .padding(.top, 20)
+
+                    Spacer()
+
+                    // Grid List or No Data Message
                     if grids.isEmpty {
-                        Text("No grids created, create a new grid to begin.")
-                            .foregroundColor(.gray)
-                            .font(.headline)
-                            .padding()
+                        VStack(spacing: 10) {
+                            Text("No grids yet!")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.gold)
+                            
+                            Text("Tap the '+' button below to create your first grid.")
+                                .font(.body)
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 30)
+                        }
+                        .padding(.top, 40)
                     } else {
-                        List {
-                            ForEach(grids, id: \.id) { grid in
-                                NavigationLink(destination: RoomGridContainerView(gridId: grid.id ?? "")){ // Changed from mapId to gridId
-                                    HStack{
-                                        Image(systemName: "map.fill")
-                                        Text(grid.name)
+                        ScrollView {
+                            VStack(spacing: 15) {
+                                ForEach(grids, id: \.id) { grid in
+                                    NavigationLink(destination: RoomGridContainerView(gridId: grid.id)) {
+                                        HStack {
+                                            Image(systemName: "map.fill")
+                                                .foregroundColor(.black)
+                                            Text(grid.gridName)
+                                                .font(.headline)
+                                                .foregroundColor(.black)
+                                            Spacer()
+                                            Text(formattedDate(grid.startDate))
+                                                .font(.caption)
+                                                .foregroundColor(.black.opacity(0.7))
+                                        }
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.gold)
+                                        .cornerRadius(10)
+                                        .shadow(radius: 5)
                                     }
                                 }
                             }
-                            .onDelete(perform: deleteGrid)
+                            .padding()
                         }
                     }
-                    
+
                     Spacer()
+
+                    // Floating Plus Button (Centered Above Tabs)
+                    Button(action: { showCreateGrid.toggle() }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundColor(.black)
+                            .padding()
+                            .background(Color.gold)
+                            .clipShape(Circle())
+                            .shadow(radius: 5)
+                    }
+                    .padding(.bottom, 20)
                 }
-                
-                // Removed .onAppear(perform: loadGrids), listener added in .onAppear
                 .onAppear {
-                    setupListener()
+                    loadGrids()
+                    setupGridListener() // ✅ Live updates
                 }
-                .onDisappear {
-                    listener?.remove() // Remove listener when view disappears
-                }
-                .sheet(isPresented: $showCreateGrid){
+                .sheet(isPresented: $showCreateGrid) {
                     CreateGridView()
                 }
             }
             .navigationBarHidden(true)
         }
     }
-    
-    func setupListener() {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            print("User not authenticated.")
-            return
-        }
-        
-        let db = Firestore.firestore()
-        listener = db.collection("users").document(userId).collection("grids")
-            .addSnapshotListener { (querySnapshot, error) in
-                if let error = error {
-                    print("Failed to get data, \(error)")
-                    return
-                }
-                
-                guard let documents = querySnapshot?.documents else { return }
-                self.grids = documents.compactMap{ document -> Grid? in
-                    try? document.data(as: Grid.self)
-                }
-            }
+
+    /// **Formats Date for UI**
+    func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
-    
-    
+
+    /// **Deletes a Grid**
     private func deleteGrid(at offsets: IndexSet) {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            print("User not authenticated.")
-            return
-        }
-        let db = Firestore.firestore()
-        
-        offsets.forEach { index in
-            let gridToDelete = grids[index]
-            guard let mapId = gridToDelete.id else {
-                print("Grid had no id \(gridToDelete)")
-                return
-            }
-            db.collection("users").document(userId).collection("grids").document(mapId).delete { error in
-                if let error = error {
-                    print("Failed to delete map with id: \(mapId), \(error.localizedDescription)")
-                } else {
-                    print("Successfully deleted map with id: \(mapId)")
-                }
-            }
+        grids.remove(atOffsets: offsets)
+        saveGrids()
+    }
+
+    /// **Loads Grids from Local Storage**
+    private func loadGrids() {
+        let fileName = "grids.json"
+        let filePath = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            let data = try Data(contentsOf: filePath)
+            grids = try JSONDecoder().decode([Grid].self, from: data)
+            print("✅ Loaded \(grids.count) grids")
+        } catch {
+            print("⚠️ No saved grids found")
         }
     }
-}
 
-struct Grid : Codable, Identifiable {
-    @DocumentID var id: String?
-    var name: String
-}
+    /// **Saves Grids to Local Storage**
+    private func saveGrids() {
+        let fileName = "grids.json"
+        let filePath = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
 
-struct CreateGridView : View{
-    @State private var mapName: String = ""
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body : some View {
-        ZStack {
-            HeatmapBackgroundView()
-            VStack {
-                TextField("Enter Grid Name", text: $mapName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                
-                Button(action: createGrid){
-                    Text("Create Grid")
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.gold)
-                        .foregroundColor(.black)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                Spacer()
-            }
-            .navigationBarHidden(true)
-            .toolbar{
-                ToolbarItem(placement: .navigationBarLeading){
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        HStack{
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
+        do {
+            let data = try JSONEncoder().encode(grids)
+            try data.write(to: filePath)
+            print("✅ Grids saved")
+        } catch {
+            print("❌ Failed to save grids: \(error.localizedDescription)")
+        }
+    }
+
+    /// **Live Updates: Listen for Grid Changes**
+    private func setupGridListener() {
+        let filePath = FileManager.default.temporaryDirectory.appendingPathComponent("grids.json")
+
+        DispatchQueue.global(qos: .background).async {
+            while true {
+                if let data = try? Data(contentsOf: filePath),
+                   let updatedGrids = try? JSONDecoder().decode([Grid].self, from: data) {
+                    DispatchQueue.main.async {
+                        self.grids = updatedGrids
                     }
                 }
+                sleep(5) // ✅ Refresh every 5 seconds
             }
         }
     }
-    
-    func createGrid() {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            print("User not authenticated.")
-            return
-        }
-        let db = Firestore.firestore()
-        let newGrid = Grid(name: mapName)
-        do{
-            let _ = try db.collection("users").document(userId).collection("grids").addDocument(from: newGrid)
-            print("✅ Created a new Grid with id: \(mapName)")
-            presentationMode.wrappedValue.dismiss()
-        } catch {
-            print("❌ Could not Create new grid doc \(error.localizedDescription)")
-        }
-    }
 }
+

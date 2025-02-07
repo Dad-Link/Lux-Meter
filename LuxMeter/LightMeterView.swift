@@ -167,37 +167,36 @@ struct LightMeterView: View {
         }
     }
 
-      private func toggleMeasurement() {
-         if isMeasuring {
-             // Stop Measurement & Capture Data
-             lightMeterManager.stopMeasuring()
-             
+    private func toggleMeasurement() {
+        if isMeasuring {
+            lightMeterManager.stopMeasuring()
+            
             if let lightLevel = lightMeterManager.lightLevel, let image = lightMeterManager.captureCurrentFrame() {
                 currentReading = lightLevel
-                self.capturedImage = image // Update capturedImage first
+                self.capturedImage = image
                 let uuid = UUID().uuidString
-                
-               
-                 let fileURL = saveImageLocally(image: image, uuid: uuid)
-                                  
-                 self.reading = Reading(
-                    id: uuid,
-                    luxValue: currentReading,
-                    timestamp: Date(),
-                    lightReference: "N/A",
-                    gridLocation: "N/A",
-                    siteLocation: "N/A",
-                    fixtureDetails: "N/A",
-                    knownWattage: "Unknown",
-                    notes: "No notes",
-                    isFaulty: false,
-                    imageUrl: fileURL.path
-                )
-                
-                 print("📸 Image captured and saved locally with path: \(fileURL.path)")
+
+                if let fileURL = saveImageLocally(image: image, readingId: uuid) {
+                    self.reading = Reading(
+                        id: uuid,
+                        luxValue: currentReading,
+                        timestamp: Date(),
+                        lightReference: "N/A",
+                        gridLocation: "N/A",
+                        siteLocation: "N/A",
+                        fixtureDetails: "N/A",
+                        knownWattage: "Unknown",
+                        notes: "No notes",
+                        isFaulty: false,
+                        imageUrl: fileURL // ✅ Correctly storing file path
+                    )
+
+                    print("📸 Image captured and saved locally at: \(fileURL)")
+                } else {
+                    print("❌ Failed to save image locally")
+                }
             } else {
-               
-               self.reading = Reading(
+                self.reading = Reading(
                     id: UUID().uuidString,
                     luxValue: 0,
                     timestamp: Date(),
@@ -208,30 +207,34 @@ struct LightMeterView: View {
                     knownWattage: "Unknown",
                     notes: "No notes",
                     isFaulty: false,
-                   imageUrl: ""
+                    imageUrl: ""
                 )
-           }
-             showReadingDetails = true // Show the card after capturing
+            }
+            showReadingDetails = true
         } else {
-            // Start Measurement
             lightMeterManager.startMeasuring()
             capturedImage = nil
             reading = nil
-            
         }
-         isMeasuring.toggle()
-     }
+        isMeasuring.toggle()
+    }
 
      
-    private func saveImageLocally(image: UIImage, uuid: String) -> URL {
-        if let imageData = image.jpegData(compressionQuality: 0.8) {
-            let fileURL = getDocumentsDirectory().appendingPathComponent("\(uuid).jpg")
-            try? imageData.write(to: fileURL)
-            print("💾 Image saved locally to: \(fileURL.path)")
-            return fileURL
+    private func saveImageLocally(image: UIImage, readingId: String) -> String? {
+        let fileName = "\(readingId).jpg"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            do {
+                try data.write(to: fileURL)
+                return fileURL.path
+            } catch {
+                print("❌ Failed to save image: \(error)")
+            }
         }
-      return getDocumentsDirectory()
+        return nil
     }
+
     
     private func deleteLocalImage(id:String) {
         let fileURL = getDocumentsDirectory().appendingPathComponent("\(id).jpg")
@@ -249,7 +252,6 @@ struct LightMeterView: View {
         }
          await saveReadingToFirestore(userId: userId, reading: reading)
     }
-
 
 
     private func saveReadingToFirestore(userId: String, reading: Reading) async {

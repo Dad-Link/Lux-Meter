@@ -111,37 +111,58 @@ struct ReadingsView: View {
     }
     
     private func setupListener() {
-       guard let userId = Auth.auth().currentUser?.uid else { return }
+        guard let userId = Auth.auth().currentUser?.uid else { return }
 
         let db = Firestore.firestore()
-        isLoading = true // Set loading to true while we fetch data
-         listener = db.collection("users").document(userId).collection("readings")
-             .order(by: "timestamp", descending: true)
-              .addSnapshotListener { snapshot, error in
-             isLoading = false // Set loading to false once the data is loaded.
-                 if let error = error {
-                     errorMessage = "Error loading readings: \(error.localizedDescription)"
-                      return
-                 }
-                 
-                 guard let documents = snapshot?.documents else { return }
-                 self.readings = documents.compactMap { doc -> Reading? in
+        isLoading = true
+
+        listener = db.collection("users").document(userId).collection("readings")
+            .order(by: "timestamp", descending: true)
+            .addSnapshotListener { snapshot, error in
+                isLoading = false
+                if let error = error {
+                    errorMessage = "Error loading readings: \(error.localizedDescription)"
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+                self.readings = documents.compactMap { doc -> Reading? in
                     let data = doc.data()
-                  return Reading(
-                     id: doc.documentID,
-                      luxValue: data["luxValue"] as? Float ?? 0.0,
-                      timestamp: (data["timestamp"] as? Timestamp)?.dateValue() ?? Date(),
-                      lightReference: data["lightReference"] as? String ?? "",
-                      gridLocation: data["gridLocation"] as? String ?? "",
-                      siteLocation: data["siteLocation"] as? String ?? "",
-                      fixtureDetails: data["fixtureDetails"] as? String ?? "",
-                      knownWattage: data["knownWattage"] as? String ?? "",
-                      notes: data["notes"] as? String ?? "",
-                      isFaulty: data["isFaulty"] as? Bool ?? false,
-                      imageUrl: data["imageUrl"] as? String
+                    let localImagePath = getLocalImagePath(for: doc.documentID) // ✅ Load from local storage
+
+                    return Reading(
+                        id: doc.documentID,
+                        luxValue: data["luxValue"] as? Float ?? 0.0,
+                        timestamp: (data["timestamp"] as? Timestamp)?.dateValue() ?? Date(),
+                        lightReference: data["lightReference"] as? String ?? "",
+                        gridLocation: data["gridLocation"] as? String ?? "",
+                        siteLocation: data["siteLocation"] as? String ?? "",
+                        fixtureDetails: data["fixtureDetails"] as? String ?? "",
+                        knownWattage: data["knownWattage"] as? String ?? "",
+                        notes: data["notes"] as? String ?? "",
+                        isFaulty: data["isFaulty"] as? Bool ?? false,
+                        imageUrl: data["imageUrl"] as? String,
+                        localImagePath: localImagePath // ✅ Use local image path if available
                     )
-                 }
-             }
+                }
+            }
+    }
+    
+    private func loadImageFromPath(path: String) -> UIImage? {
+        let fileURL = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return UIImage(contentsOfFile: fileURL.path)
+        }
+        return nil
+    }
+    private func getLocalImagePath(for readingId: String) -> String? {
+        let fileName = "\(readingId).jpg"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return fileURL.path
+        }
+        return nil
     }
 
     

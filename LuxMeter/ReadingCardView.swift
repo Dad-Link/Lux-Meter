@@ -108,27 +108,44 @@ struct ReadingCardView: View {
              
             // Display the image
             if let capturedImage = capturedImage {
+                // ✅ Display newly captured image
                 Image(uiImage: capturedImage)
                     .resizable()
                     .scaledToFit()
                     .frame(height: 160)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(radius: 5)
-            }  else if let imageUrlString = reading.imageUrl, !imageUrlString.isEmpty, let image = loadImageFromPath(path: imageUrlString) {
-                Image(uiImage: image)
-                     .resizable()
-                     .scaledToFit()
-                     .frame(height: 160)
-                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                     .shadow(radius: 5)
-            } else {
-                 Image(systemName: "photo.fill")
-                 .resizable()
-                  .scaledToFit()
+
+            } else if let localImagePath = reading.localImagePath, let localImage = loadImageFromPath(path: localImagePath) {
+                // ✅ Load from local storage if available
+                Image(uiImage: localImage)
+                    .resizable()
+                    .scaledToFit()
                     .frame(height: 160)
-                   .foregroundColor(.gray)
-                   .padding()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(radius: 5)
+
+            } else if let imageUrlString = reading.imageUrl, let url = URL(string: imageUrlString) {
+                // ✅ Load from Firebase (AsyncImage)
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFit()
+                } placeholder: {
+                    ProgressView()
+                }
+                .frame(height: 160)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(radius: 5)
+
+            } else {
+                // ✅ Show placeholder when no image is available
+                Image(systemName: "photo.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 160)
+                    .foregroundColor(.gray)
+                    .padding()
             }
+
             
             
             // ✅ Display all reading values
@@ -170,6 +187,18 @@ struct ReadingCardView: View {
                 return nil
            }
         }
+    
+    func loadImage(for readingId: String) -> UIImage? {
+        let fileManager = FileManager.default
+        let directory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+        let fileURL = directory?.appendingPathComponent("\(readingId).jpg")
+
+        if let url = fileURL, let data = try? Data(contentsOf: url) {
+            return UIImage(data: data)
+        }
+        return nil
+    }
+
     
     // MARK: - Edit Card
     private var editCard: some View {
@@ -221,6 +250,42 @@ struct ReadingCardView: View {
         .shadow(color: .white.opacity(0.3), radius: 8)
     }
     
+    func saveImageLocally(_ image: UIImage, for readingId: String) -> URL? {
+        let fileManager = FileManager.default
+        let directory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+        let fileURL = directory?.appendingPathComponent("\(readingId).jpg")
+
+        guard let data = image.jpegData(compressionQuality: 0.8), let url = fileURL else { return nil }
+
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            print("❌ Failed to save image locally: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func uploadImageToFirebase(image: UIImage, readingId: String, completion: @escaping (String?) -> Void) {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        let storageRef = Storage.storage().reference().child("users/\(userId)/readings/\(readingId).jpg")
+        
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            completion(nil)
+            return
+        }
+        
+        storageRef.putData(imageData, metadata: nil) { _, error in
+            if let error = error {
+                print("❌ Failed to upload image: \(error.localizedDescription)")
+                completion(nil)
+            } else {
+                storageRef.downloadURL { url, _ in
+                    completion(url?.absoluteString)
+                }
+            }
+        }
+    }
     private func saveReading() {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         let db = Firestore.firestore()

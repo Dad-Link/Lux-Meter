@@ -1,117 +1,103 @@
 import UIKit
 import PDFKit
 
+// MARK: - PDF Export
 class GridPDFExporter {
-    static func generatePDF(from gridData: [[LuxCell]], title: String) -> Data {
-         let pdfMetaData = [
-            kCGPDFContextCreator: "Light Meter App",
-            kCGPDFContextAuthor: "User",
-            kCGPDFContextTitle: "Light Meter Reading"
+    static func generatePDF(from grid: [[LuxCell]], title: String) -> Data {
+        let pdfMetaData = [
+            kCGPDFContextTitle: title,
+            kCGPDFContextCreator: "Lux Mapper App"
         ]
-         
-        let format = UIGraphicsPDFRendererFormat()
-        format.documentInfo = pdfMetaData as [String: Any]
         
-       let pageWidth = 8.5 * 72.0
-       let pageHeight = 11 * 72.0
-       let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
-
-        let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
-
-        let data = renderer.pdfData { (context) in
+        let pageWidth = 8.5 * 72.0 // 8.5 inches in points
+        let pageHeight = 11 * 72.0 // 11 inches in points
+        let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
+        
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: UIGraphicsPDFRendererFormat())
+        
+        let pdfData = renderer.pdfData { (context) in
             context.beginPage()
-           addContent(context: context, rect: pageRect, gridData: gridData, title: title)
+            
+            let textAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 18),
+                .foregroundColor: UIColor.black
+            ]
+            
+            let titleString = NSAttributedString(string: title, attributes: textAttributes)
+            let titleSize = titleString.size()
+            let titleRect = CGRect(x: (pageWidth - titleSize.width) / 2, y: 50, width: titleSize.width, height: titleSize.height)
+            titleString.draw(in: titleRect)
+            
+            let gridOriginX = 50.0
+            let gridOriginY = titleRect.maxY + 30
+            let cellSize: CGFloat = 30.0
+            let cellSpacing: CGFloat = 2.0
+            
+            for (row, rowData) in grid.enumerated(){
+                for (col, cellData) in rowData.enumerated() {
+                    let x = gridOriginX + CGFloat(col) * (cellSize + cellSpacing)
+                    let y = gridOriginY + CGFloat(row) * (cellSize + cellSpacing)
+                    let cellRect = CGRect(x: x, y: y, width: cellSize, height: cellSize)
+                    
+                    let cellColor = getColorForLuxValue(cellData.luxValue)
+                    cellColor.setFill()
+                    context.fill(cellRect)
+                    
+                    // Add border around the cell for better visibility
+                    UIColor.black.setStroke()
+                    context.stroke(cellRect)
+                    
+                    let luxText = cellData.luxValue != nil ? "\(cellData.luxValue!)" : ""
+                    let luxAttributes: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.systemFont(ofSize: 10),
+                        .foregroundColor: UIColor.black
+                    ]
+                    let luxString = NSAttributedString(string: luxText, attributes: luxAttributes)
+                    let textSize = luxString.size()
+                     //Fixed text positioning for better readability
+                    let textY = y + (cellSize - textSize.height) / 2
+                    
+                }
+            }
         }
-         return data
+        
+        return pdfData
     }
     
-   static func addContent(context: UIGraphicsPDFRendererContext, rect: CGRect, gridData: [[LuxCell]], title: String) {
-         let titleFont = UIFont.boldSystemFont(ofSize: 24)
-         let headingFont = UIFont.boldSystemFont(ofSize: 16)
-         let textFont = UIFont.systemFont(ofSize: 14)
-        
-         let margin: CGFloat = 20
-         let availableWidth = rect.width - 2 * margin
-         var currentY = margin
-
-        let titleAttributes = [NSAttributedString.Key.font: titleFont]
-        let titleString = NSAttributedString(string: title, attributes: titleAttributes)
-        let titleRect = CGRect(x: margin, y: currentY, width: availableWidth, height: titleString.size().height)
-          titleString.draw(in: titleRect)
-        currentY += titleRect.height + 20
-
-       
-      let columnCount = gridData.first?.count ?? 0
-      let rowCount = gridData.count
-      let cellWidth: CGFloat = 50
-      let cellHeight: CGFloat = 30
-      let headerHeight: CGFloat = 20
-
-        
-       let startX = margin
-        
-        var currentX = startX
-     
-         // Draw Headers
-         for col in 0..<columnCount {
-            let headerRect = CGRect(x: currentX, y: currentY, width: cellWidth, height: headerHeight)
-             
-              let headerString = NSAttributedString(string: "Col \(col + 1)", attributes: [NSAttributedString.Key.font: textFont])
-             
-            headerString.draw(in: headerRect)
-              currentX += cellWidth
-       }
-      currentY += headerHeight + 5
-      currentX = startX
-
-         // Draw Grid
-      for row in 0..<rowCount {
-        let rowY = currentY
-       let rowLabel = NSAttributedString(string: "Row \(row+1): ", attributes: [NSAttributedString.Key.font: textFont])
-        let rowLabelRect = CGRect(x: margin - 15, y: rowY, width: 70, height: cellHeight)
-        rowLabel.draw(in: rowLabelRect)
-            
-        currentX = startX
-
-        for col in 0..<columnCount {
-             let cellRect = CGRect(x: currentX, y: rowY, width: cellWidth, height: cellHeight)
-          
-            UIColor.black.setStroke() // ✅ Set the stroke color for the context using UIColor
-            context.stroke(cellRect)
-             
-           let cellText = "\(gridData[row][col].luxValue.map{ String($0)} ?? "N/A")"
-            let cellAttributes = [NSAttributedString.Key.font: textFont]
-             
-            let cellTextString = NSAttributedString(string: cellText, attributes: cellAttributes)
-             
-              let textRect = CGRect(x: currentX + 5, y: rowY , width: cellWidth - 10 , height: cellHeight)
-              cellTextString.draw(in: textRect)
-            
-            let lightReferenceText = "\(gridData[row][col].lightReference ?? "N/A")"
-            let lightReferenceTextAttributes = [NSAttributedString.Key.font: textFont]
-              
-            let lightReferenceTextString = NSAttributedString(string: lightReferenceText, attributes: lightReferenceTextAttributes)
-              
-              let lightReferenceTextRect = CGRect(x: currentX , y: rowY + 15 , width: cellWidth - 10 , height: cellHeight)
-             lightReferenceTextString.draw(in: lightReferenceTextRect)
-            
-
-            currentX += cellWidth
+    
+    private static func getColorForLuxValue(_ lux: Int?) -> UIColor {
+        guard let luxValue = lux else {
+            return UIColor.lightGray // Default color if luxValue is nil
         }
-          currentY += cellHeight + 2
-       }
+        switch luxValue {
+        case 0...100:
+            return UIColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 1.0)
+        case 101...300:
+            return UIColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)
+        case 301...600:
+            return UIColor(red: 1.0, green: 1.0, blue: 0.0, alpha: 1.0)
+        case 601...1000:
+            return UIColor(red: 1.0, green: 0.5, blue: 0.0, alpha: 1.0)
+        default:
+            return UIColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        }
     }
-
-
-   static func savePDF(_ pdfData: Data, fileName: String) -> URL? {
-       let tempDir = FileManager.default.temporaryDirectory
-       let tempFileURL = tempDir.appendingPathComponent("\(fileName).pdf")
-       do {
-           try pdfData.write(to: tempFileURL)
-         return tempFileURL
-       } catch {
-         print("Error saving PDF: \(error)")
+    
+    
+    static func savePDF(_ pdfData: Data, fileName: String) -> URL? {
+        let fileManager = FileManager.default
+        guard let documentDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
-       }
+        }
+        
+        let fileURL = documentDirectory.appendingPathComponent("\(fileName).pdf")
+        
+        do {
+            try pdfData.write(to: fileURL)
+            return fileURL
+        } catch {
+            print("Error writing PDF to file: \(error)")
+            return nil
+        }
     }
 }
