@@ -13,7 +13,9 @@
 	<key>com.apple.developer.devicecheck.appattest-environment</key>
 	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array/>
+	<array>
+		<string>iCloud.LuxMeter</string>
+	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>
 		<string>CloudKit</string>
@@ -28,11 +30,11 @@
 	<true/>
 	<key>com.apple.security.personal-information.addressbook</key>
 	<true/>
-	<key>com.apple.security.personal-information.calendars</key>
-	<true/>
-	<key>com.apple.security.personal-information.location</key>
+	<key>com.apple.security.personal-information.photos-library</key>
 	<true/>
 	<key>keychain-access-groups</key>
-	<array/>
+	<array>
+		<string>$(AppIdentifierPrefix)com.-LuxMeter-app.LuxMeter</string>
+	</array>
 </dict>
 </plist>

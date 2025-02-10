@@ -88,6 +88,21 @@ struct SignUpView: View {
                             .font(.subheadline)
                             .foregroundColor(.gold)
                             .padding(.top, 5)
+
+                            // ✅ Add Clickable Terms of Service Link
+                            VStack {
+                                Text("By signing up, you agree to our")
+                                    .font(.footnote)
+                                    .foregroundColor(.white.opacity(0.8))
+
+                                NavigationLink(destination: TermsOfServiceView()) {
+                                    Text("Terms of Service")
+                                        .font(.footnote)
+                                        .foregroundColor(.gold)
+                                        .underline()
+                                }
+                            }
+                            .padding(.top, 10)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
@@ -97,6 +112,7 @@ struct SignUpView: View {
         .animation(.easeInOut, value: isLoading)
         .navigationBarHidden(true)
     }
+
 
     private func signUp() {
         guard !firstName.isEmpty, !lastName.isEmpty, !personalEmail.isEmpty, !password.isEmpty, password == confirmPassword else {
@@ -142,11 +158,11 @@ struct SignUpView: View {
             "personalEmail": personalEmail,
             "isEmailVerified": user.isEmailVerified,
             "createdAt": FieldValue.serverTimestamp(),
-            "businessName": "Doe Electricals",
-            "businessAddress": "123 Street, City",
-            "businessEmail": "contact@doeelectricals.com",
-            "businessNumber": "+44 123 456 789",
-            "businessLogoUrl": "",
+            "businessName": "", // Blank field
+            "businessAddress": "", // Blank field
+            "businessEmail": "", // Blank field
+            "businessNumber": "", // Blank field
+            "businessLogoUrl": "", // Blank field
             "settings": [
                 "darkMode": true,
                 "notificationsEnabled": true

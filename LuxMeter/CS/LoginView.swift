@@ -7,107 +7,128 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var errorMessage: String?
+    @State private var isKeyboardVisible = false  // ✅ Detect keyboard visibility
 
     var body: some View {
         ZStack {
-            // ✅ Fully Black Background
-            Color.black.edgesIgnoringSafeArea(.all)
+            Color.black.edgesIgnoringSafeArea(.all) // ✅ Black Theme
+            
+            VStack {
+                Spacer().frame(height: 20) // ✅ Top Padding
+                
+                ScrollView {
+                    VStack(spacing: 30) {
+                        // ✅ Title
+                        Text("Welcome Back!")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.gold)
 
-            ScrollView {
-                VStack(spacing: 30) {
-                    // ✅ Title
-                    Text("Welcome Back!")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.gold)
-
-                    Text("Log in to your account to continue using Lux Meter.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 20)
-
-                    // ✅ Email & Password Fields
-                    Group {
-                        GoldTextField(title: "Email", text: $email, isSecure: false)
-                        GoldTextField(title: "Password", text: $password, isSecure: true)
-
-                    }
-
-                    // ✅ Error Message (if any)
-                    if let errorMessage = errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.subheadline)
+                        Text("Log in to your account to continue using Lux Meter.")
+                            .font(.body)
                             .multilineTextAlignment(.center)
+                            .foregroundColor(.white.opacity(0.9))
                             .padding(.horizontal, 20)
-                    }
 
-                    // ✅ Login Button
-                    Button(action: login) {
-                        Text("Log In")
-                            .font(.headline)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.gold)
-                            .foregroundColor(.black)
-                            .cornerRadius(15)
-                            .shadow(radius: 10)
-                            .padding(.horizontal, 40)
-                    }
-
-                    // ✅ Forgot Password & Sign-Up Links
-                    VStack(spacing: 5) {
-                        NavigationLink(destination: ForgotPasswordView()) {
-                            Text("Forgot Password?")
-                                .font(.subheadline)
-                                .foregroundColor(.gold)
-                                .underline()
+                        // ✅ Email & Password Fields
+                        Group {
+                            GoldTextField(title: "Email", text: $email, isSecure: false)
+                            GoldTextField(title: "Password", text: $password, isSecure: true)
                         }
 
-                        NavigationLink(destination: SignUpView()) {
-                            VStack {
-                                Text("Don't have an account?")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
+                        // ✅ Error Message (if any)
+                        if let errorMessage = errorMessage {
+                            Text(errorMessage)
+                                .foregroundColor(.red)
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                        }
 
-                                Text("Sign Up")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
+                        // ✅ Login Button
+                        Button(action: login) {
+                            Text("Log In")
+                                .font(.headline)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.gold)
+                                .foregroundColor(.black)
+                                .cornerRadius(15)
+                                .shadow(radius: 10)
+                                .padding(.horizontal, 40)
+                        }
+
+                        // ✅ Forgot Password & Sign-Up Links
+                        VStack(spacing: 5) {
+                            NavigationLink(destination: ForgotPasswordView()) {
+                                Text("Forgot Password?")
+                                    .font(.subheadline)
                                     .foregroundColor(.gold)
+                                    .underline()
+                            }
+
+                            NavigationLink(destination: SignUpView()) {
+                                VStack {
+                                    Text("Don't have an account?")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white)
+
+                                    Text("Sign Up")
+                                        .font(.headline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.gold)
+                                }
                             }
                         }
                     }
+                    .padding(.top, 40)
                 }
-                .padding(.top, 40)
-            }
 
-            // ✅ Footer
-            VStack {
-                Spacer()
-                Link(destination: URL(string: "https://dadlink.co.uk")!) {
-                    Text("Powered by DadLink Technologies Limited")
-                        .font(.footnote)
-                        .foregroundColor(.gold)
-                        .underline()
-                        .padding(.bottom, 20)
+                // ✅ Fixed Footer (Hidden When Keyboard is Up)
+                if !isKeyboardVisible {
+                    VStack {
+                        Spacer()
+                        Link(destination: URL(string: "https://dadlink.co.uk")!) {
+                            Text("Powered by DadLink Technologies Limited")
+                                .font(.footnote)
+                                .foregroundColor(.gold)
+                                .underline()
+                                .padding(.bottom, 20)
+                        }
+                    }
                 }
             }
         }
-        .navigationBarHidden(true)
         .onAppear(perform: autoLogin)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation {
+                isKeyboardVisible = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation {
+                isKeyboardVisible = false
+            }
+        }
+        .navigationBarHidden(true)
     }
 
-    // MARK: - Auto Login
     private func autoLogin() {
+        guard authViewModel.autoLoginEnabled else {
+            print("⚠️ Auto-login is disabled. Staying on LoginView.")
+            authViewModel.isLoggedIn = false
+            return
+        }
+
         if let user = Auth.auth().currentUser, user.isEmailVerified {
             let db = Firestore.firestore()
             db.collection("users").document(user.uid).getDocument { snapshot, error in
                 if let error = error {
-                    print("Error checking user: \(error.localizedDescription)")
+                    print("❌ Error checking user: \(error.localizedDescription)")
                     authViewModel.isLoggedIn = false
                 } else if snapshot?.exists == true {
                     authViewModel.isLoggedIn = true
+                    print("✅ Auto-login successful")
                 } else {
                     authViewModel.isLoggedIn = false
                 }
@@ -196,3 +217,4 @@ struct GoldTextField: View {
         .frame(maxWidth: .infinity)
     }
 }
+        
