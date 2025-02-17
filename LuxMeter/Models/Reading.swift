@@ -1,11 +1,10 @@
 import FirebaseFirestore
 
-struct Reading: Identifiable {
-    var id: String
+struct Reading: Identifiable, Codable {    var id: String
     var luxValue: Float
     var timestamp: Date
     var lightReference: String
-    var gridLocation: String
+    var lightLocation: String
     var siteLocation: String
     var fixtureDetails: String
     var knownWattage: String

@@ -3,42 +3,47 @@ import PDFKit
 
 struct GridPDFMaker {
     static func generatePDF(
+        jobName: String,
+        userGridId: String,
+        businessName: String,
+        address: String,
+        town: String,
+        city: String,
+        county: String,
+        postcode: String,
+        startDate: Date,
         from grid: [[LuxCell]],
         title: String,
         businessLogo: UIImage?,
-        businessName: String?,
         firstName: String?,
         lastName: String?,
         businessAddress: String?,
         businessEmail: String?,
         businessNumber: String?,
-        siteLocation: String? // ✅ This will now correctly display the Grid Name
+        siteLocation: String?
     ) -> Data? {
 
         let pdfMetaData = [
             kCGPDFContextCreator: "Lux Meter App",
             kCGPDFContextTitle: title
         ]
-        
-        let pageWidth: CGFloat = 595.2 // A4 width (8.27 inches * 72 dpi)
-        let pageHeight: CGFloat = 841.8 // A4 height (11.69 inches * 72 dpi)
+
+        let pageWidth: CGFloat = 595.2
+        let pageHeight: CGFloat = 841.8
         let padding: CGFloat = 20
         let headerHeight: CGFloat = 200
-        let gridPadding: CGFloat = 5.0 // ✅ Better grid spacing
-        let cellSize: CGFloat = min(25, (pageWidth - 80) / CGFloat(max(grid.first?.count ?? 1, 10))) // ✅ Auto-scale grid size
-        
-        let startX = (pageWidth - CGFloat(grid.first?.count ?? 0) * (cellSize + gridPadding)) / 2
-        let startY: CGFloat = headerHeight + 40
+        let gridPadding: CGFloat = 5.0
+        let cellSize: CGFloat = min(25, (pageWidth - 80) / CGFloat(max(grid.first?.count ?? 1, 10)))
 
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetaData as [String: Any]
 
         let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight), format: format)
-        
+
         let data = renderer.pdfData { context in
             context.beginPage()
 
-            // ✅ Centered Title
+            // Title
             let titleAttributes: [NSAttributedString.Key: Any] = [
                 .font: UIFont.boldSystemFont(ofSize: 24),
                 .foregroundColor: UIColor.black
@@ -48,41 +53,55 @@ struct GridPDFMaker {
             let titleRect = CGRect(x: (pageWidth - titleSize.width) / 2, y: padding, width: titleSize.width, height: titleSize.height)
             titleString.draw(in: titleRect)
 
-            // ✅ Business Logo (if available)
+            // Logo
             if let logo = businessLogo {
-                let logoRect = CGRect(x: pageWidth - 80, y: padding, width: 60, height: 60)
+                let logoRect = CGRect(x: (pageWidth - 60) / 2, y: titleRect.maxY + 10, width: 60, height: 60)
                 logo.draw(in: logoRect)
             }
 
-            // ✅ Business Details Section
-            var currentY = titleRect.maxY + 10
+            // Business Details
+            var currentY = titleRect.maxY + 80
             let textAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12)]
-            
-            func drawText(_ text: String?, yPosition: inout CGFloat) {
-                guard let text = text, !text.isEmpty else { return }
-                let textRect = CGRect(x: padding, y: yPosition, width: pageWidth - 2 * padding, height: 14)
-                text.draw(in: textRect, withAttributes: textAttributes)
-                yPosition += 18
+
+            let details = [
+                "Grid ID: \(userGridId)",
+                "Job Reference: \(jobName)",
+                "Business/Resident Name: \(businessName)",
+                "Street Address: \(address)",
+                "Town: \(town)",
+                "City: \(city)",
+                "County: \(county)",
+                "Postcode: \(postcode)",
+                "Start Date: \(DateFormatter.localizedString(from: startDate, dateStyle: .medium, timeStyle: .short))"
+            ]
+
+            for detail in details.filter({ !$0.isEmpty }) {
+                let detailString = NSAttributedString(string: detail, attributes: textAttributes)
+                let detailSize = detailString.size()
+                let detailRect = CGRect(x: padding, y: currentY, width: detailSize.width, height: detailSize.height)
+                detailString.draw(in: detailRect)
+                currentY += detailSize.height + 5
             }
-            
-            drawText(businessName, yPosition: &currentY)
-            drawText("\(firstName ?? "") \(lastName ?? "")", yPosition: &currentY)
-            drawText(businessAddress, yPosition: &currentY)
-            drawText(businessEmail, yPosition: &currentY)
-            drawText(businessNumber, yPosition: &currentY)
-
-            currentY += 10
-            drawText("📍 Site Location: \(siteLocation ?? "Unknown")", yPosition: &currentY) // ✅ Now displays Grid Name, not UUID
-
-            // ✅ Date & Time
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "HH:mm dd/MM/yyyy"
-            let formattedDate = dateFormatter.string(from: Date())
-            drawText("🕒 Generated on: \(formattedDate)", yPosition: &currentY)
 
             currentY += 20
 
-            // ✅ Heat Map Grid
+            // Display grid entries
+            let gridEntries = grid.flatMap { $0 }.compactMap { cell -> String? in
+                guard let luxValue = cell.luxValue, let lightRef = cell.lightReference else { return nil }
+                return "Lux: \(luxValue), Reference: \(lightRef)"
+            }.joined(separator: "\n")
+
+            let entriesText = NSAttributedString(string: "Grid Entries (for selected grid):\n\(gridEntries)", attributes: textAttributes)
+            let entriesSize = entriesText.size()
+            let entriesRect = CGRect(x: padding, y: currentY, width: entriesSize.width, height: entriesSize.height)
+            entriesText.draw(in: entriesRect)
+
+            currentY += entriesSize.height + 20
+
+            // Centered Heat Map Grid
+            let totalGridWidth = CGFloat(grid.first?.count ?? 0) * (cellSize + gridPadding)
+            let startX = (pageWidth - totalGridWidth) / 2
+
             for (rowIndex, row) in grid.enumerated() {
                 for (colIndex, cell) in row.enumerated() {
                     let cellRect = CGRect(
@@ -91,11 +110,11 @@ struct GridPDFMaker {
                         width: cellSize,
                         height: cellSize
                     )
-                    
+
                     let path = UIBezierPath(rect: cellRect)
                     getColorForLuxValue(cell.luxValue).setFill()
                     path.fill()
-                    
+
                     UIColor.black.setStroke()
                     path.stroke()
 
@@ -115,24 +134,19 @@ struct GridPDFMaker {
                 }
             }
         }
-        
+
         return data
     }
     
     private static func getColorForLuxValue(_ lux: Int?) -> UIColor {
-        guard let luxValue = lux else { return UIColor.lightGray } // Default gray for empty cells
+        guard let luxValue = lux else { return UIColor.lightGray }
 
         switch luxValue {
-        case 0...100:
-            return UIColor.blue  // Low light (blue)
-        case 101...300:
-            return UIColor.green  // Moderate light (green)
-        case 301...600:
-            return UIColor.yellow  // Bright light (yellow)
-        case 601...1000:
-            return UIColor.orange  // Very bright light (orange)
-        default:
-            return UIColor.red  // Extremely bright (red)
+        case 0...100: return UIColor.blue
+        case 101...300: return UIColor.green
+        case 301...600: return UIColor.yellow
+        case 601...1000: return UIColor.orange
+        default: return UIColor.red
         }
     }
 

@@ -33,6 +33,7 @@
 		5D95E4532D43F4B3004B1FB8 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 5D95E4522D43F4B3004B1FB8 /* FirebaseStorageCombine-Community */; };
 		5D95E4552D43F4D6004B1FB8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D95E4542D43F4D6004B1FB8 /* SwiftUI.framework */; };
 		5DF9DF1A2D46980F005B64EE /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF9DF192D46980F005B64EE /* MapKit.framework */; };
+		F14130992D5CEA0900C33056 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F14130982D5CEA0900C33056 /* StoreKit.framework */; };
 		F1563EDA2D510D15009A8EEE /* Charts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F1563ED92D510D15009A8EEE /* Charts.framework */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +61,7 @@
 		5D5D08352D44201A005D4259 /* DeviceCheck.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceCheck.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk/System/Library/Frameworks/DeviceCheck.framework; sourceTree = DEVELOPER_DIR; };
 		5D95E4542D43F4D6004B1FB8 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 		5DF9DF192D46980F005B64EE /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk/System/Library/Frameworks/MapKit.framework; sourceTree = DEVELOPER_DIR; };
+		F14130982D5CEA0900C33056 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk/System/Library/Frameworks/StoreKit.framework; sourceTree = DEVELOPER_DIR; };
 		F1563ED92D510D15009A8EEE /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk/System/Library/Frameworks/Charts.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -99,6 +101,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F14130992D5CEA0900C33056 /* StoreKit.framework in Frameworks */,
 				F1563EDA2D510D15009A8EEE /* Charts.framework in Frameworks */,
 				5DF9DF1A2D46980F005B64EE /* MapKit.framework in Frameworks */,
 				5D5D08362D44201A005D4259 /* DeviceCheck.framework in Frameworks */,
@@ -170,6 +173,7 @@
 		5D23EEEA2D1FDC8200779174 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				F14130982D5CEA0900C33056 /* StoreKit.framework */,
 				F1563ED92D510D15009A8EEE /* Charts.framework */,
 				5DF9DF192D46980F005B64EE /* MapKit.framework */,
 				5D5D08352D44201A005D4259 /* DeviceCheck.framework */,
@@ -417,10 +421,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.-LuxMeter-app.LuxMeter";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 2.1;
 			};
 			name = Debug;
@@ -461,10 +466,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.-LuxMeter-app.LuxMeter";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 2.1;
 			};
 			name = Release;

@@ -4,16 +4,14 @@ struct LandingView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Gradient Background
                 LinearGradient(
                     gradient: Gradient(colors: [Color.black, Color.gold.opacity(0.6)]),
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .edgesIgnoringSafeArea(.all)
-                
-                VStack(spacing: 35) { // Reduced spacing for better fit
-                    // App Title and Tagline
+
+                VStack(spacing: 35) {
                     VStack(spacing: 8) {
                         Text("Lux Meter")
                             .font(.system(size: 36, weight: .bold, design: .rounded))
@@ -26,45 +24,20 @@ struct LandingView: View {
                             .foregroundColor(.white.opacity(0.8))
                             .padding(.horizontal, 20)
                     }
-                    .padding(.top, 40) // Prevents text cutoff
+                    .padding(.top, 40)
 
-                    // Feature Highlights
                     VStack(alignment: .center, spacing: 18) {
-                        FunFeatureRow(
-                            imageName: "sun.max.fill",
-                            title: "Precision Measurements",
-                            description: "Get accurate readings for any environment, indoors or outdoors."
-                        )
-
-                        FunFeatureRow(
-                            imageName: "rectangle.and.pencil.and.ellipsis",
-                            title: "User-Friendly Interface",
-                            description: "Navigate effortlessly with our intuitive and clean design."
-                        )
-
-                        FunFeatureRow(
-                            imageName: "camera.metering.spot",
-                            title: "Advanced Technology",
-                            description: "Harness cutting-edge sensors for reliable and fast results."
-                        )
-
-                        FunFeatureRow(
-                            imageName: "chart.bar.fill",
-                            title: "Real-Time Analytics",
-                            description: "Monitor light levels dynamically and save historical data."
-                        )
-
-                        FunFeatureRow(
-                            imageName: "lock.shield.fill",
-                            title: "Secure and Private",
-                            description: "Your data is safely stored and accessible only to you."
-                        )
+                        FunFeatureRow(imageName: "sun.max.fill", title: "Precision Measurements", description: "Get accurate readings for any environment, indoors or outdoors.")
+                        FunFeatureRow(imageName: "rectangle.and.pencil.and.ellipsis", title: "User-Friendly Interface", description: "Navigate effortlessly with our intuitive and clean design.")
+                        FunFeatureRow(imageName: "camera.metering.spot", title: "Advanced Technology", description: "Harness cutting-edge sensors for reliable and fast results.")
+                        FunFeatureRow(imageName: "chart.bar.fill", title: "Real-Time Analytics", description: "Monitor light levels dynamically and save historical data.")
+                        FunFeatureRow(imageName: "lock.shield.fill", title: "Secure and Private", description: "Your data is safely stored and accessible only to you.")
                     }
 
                     Spacer()
 
-                    // Navigate to LoginView
-                    NavigationLink(destination: LoginView()) {
+                    // Directly navigate to the app
+                    NavigationLink(destination: MainTabView()) {
                         Text("Enter App")
                             .font(.headline)
                             .padding()
@@ -81,11 +54,9 @@ struct LandingView: View {
                             .shadow(color: Color.gold.opacity(0.5), radius: 10, x: 0, y: 10)
                             .padding(.horizontal, 40)
                             .padding(.bottom, 30)
-                            .accessibility(label: Text("Enter App Button"))
-                            .accessibility(addTraits: .isButton)
                     }
                 }
-                .frame(maxHeight: UIScreen.main.bounds.height * 0.85) // Ensures it fits within the screen
+                .frame(maxHeight: UIScreen.main.bounds.height * 0.85)
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())

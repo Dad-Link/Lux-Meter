@@ -1,26 +1,27 @@
 import SwiftUI
 import PDFKit
-import UIKit
 
 struct PDFPreviewView: View {
     let pdfURL: URL
+    @State private var showShareSheet = false
 
     var body: some View {
-        VStack {
-            if FileManager.default.fileExists(atPath: pdfURL.path) {
-                PDFKitRepresentedView(url: pdfURL)
-            } else {
-                VStack {
-                    Text("PDF file is missing.")
-                        .foregroundColor(.red)
-                        .font(.headline)
-                    Text("Please try exporting again.")
-                        .foregroundColor(.gray)
+        NavigationView {
+            PDFKitRepresentedView(url: pdfURL)
+                .navigationBarTitle("PDF Preview", displayMode: .inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showShareSheet = true
+                        }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.title2)
+                        }
+                    }
                 }
-            }
-        }
-        .onAppear {
-            print("📂 Opening PDF Preview: \(pdfURL.path)")
+                .sheet(isPresented: $showShareSheet) {
+                    ShareSheet(activityItems: [pdfURL])
+                }
         }
     }
 }
@@ -31,18 +32,6 @@ struct PDFKitRepresentedView: UIViewRepresentable {
     func makeUIView(context: Context) -> PDFView {
         let pdfView = PDFView()
         pdfView.autoScales = true
-
-        if FileManager.default.fileExists(atPath: url.path) {
-            if let document = PDFDocument(url: url) {
-                pdfView.document = document
-                print("✅ PDF successfully loaded: \(url.path)")
-            } else {
-                print("❌ Failed to load PDF document")
-            }
-        } else {
-            print("❌ PDF file does not exist at \(url.path)")
-        }
-
         return pdfView
     }
 

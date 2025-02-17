@@ -20,6 +20,8 @@ struct LightMeterView: View {
     @State private var feedbackMessage: String?
     @State private var capturedImage: UIImage?
     @State private var reading: Reading?
+    @State private var imageUrl: String?
+
 
     var dynamicBackground: some View {
         Color.black.edgesIgnoringSafeArea(.all)
@@ -130,7 +132,7 @@ struct LightMeterView: View {
                             print("✅ Save button pressed - Calling saveToFirebase()")
 
                             Task {
-                                await saveToFirebase(reading: reading)
+                                // await saveToFirebase(reading: reading) // Removed - we only save locally now
                             }
                             showReadingDetails = false
                         case .download:
@@ -143,7 +145,7 @@ struct LightMeterView: View {
                     displayMode: .saveOrDelete
                 )
                 .padding()
-                .background(Color.gray.opacity(0.9))
+                .background(Color.clear) // ✅ Makes the card blend with the black background
                 .cornerRadius(20)
                 .shadow(radius: 10)
                 .transition(.move(edge: .bottom))
@@ -170,69 +172,109 @@ struct LightMeterView: View {
     private func toggleMeasurement() {
         if isMeasuring {
             lightMeterManager.stopMeasuring()
-            
+
             if let lightLevel = lightMeterManager.lightLevel, let image = lightMeterManager.captureCurrentFrame() {
                 currentReading = lightLevel
                 self.capturedImage = image
                 let uuid = UUID().uuidString
 
-                if let fileURL = saveImageLocally(image: image, readingId: uuid) {
-                    self.reading = Reading(
-                        id: uuid,
-                        luxValue: currentReading,
-                        timestamp: Date(),
-                        lightReference: "N/A",
-                        gridLocation: "N/A",
-                        siteLocation: "N/A",
-                        fixtureDetails: "N/A",
-                        knownWattage: "Unknown",
-                        notes: "No notes",
-                        isFaulty: false,
-                        imageUrl: fileURL // ✅ Correctly storing file path
-                    )
+                saveImageLocally(image: image, readingId: uuid) { result in
+                    switch result {
+                    case .success(let fileURLString):
+                        let newReading = Reading(
+                            id: uuid,
+                            luxValue: currentReading,
+                            timestamp: Date(),
+                            lightReference: "",
+                            lightLocation: "",
+                            siteLocation: "",
+                            fixtureDetails: "",
+                            knownWattage: "",
+                            notes: "",
+                            isFaulty: false,
+                            imageUrl: fileURLString,
+                            localImagePath: fileURLString
+                        )
 
-                    print("📸 Image captured and saved locally at: \(fileURL)")
-                } else {
-                    print("❌ Failed to save image locally")
+                        // ✅ Save the reading locally instead of Firebase
+                        saveReadingLocally(newReading)
+
+                        reading = newReading // ✅ Update reading instance
+                        showReadingDetails = true // ✅ Show reading card after stopping
+
+                    case .failure(let error):
+                        print("❌ Image saving failed: \(error.localizedDescription)")
+                        feedbackMessage = "❌ Failed to save image. Please try again."
+                    }
                 }
-            } else {
-                self.reading = Reading(
-                    id: UUID().uuidString,
-                    luxValue: 0,
-                    timestamp: Date(),
-                    lightReference: "N/A",
-                    gridLocation: "N/A",
-                    siteLocation: "N/A",
-                    fixtureDetails: "N/A",
-                    knownWattage: "Unknown",
-                    notes: "No notes",
-                    isFaulty: false,
-                    imageUrl: ""
-                )
             }
-            showReadingDetails = true
         } else {
             lightMeterManager.startMeasuring()
             capturedImage = nil
             reading = nil
+            showReadingDetails = false
         }
         isMeasuring.toggle()
     }
 
-     
-    private func saveImageLocally(image: UIImage, readingId: String) -> String? {
-        let fileName = "\(readingId).jpg"
-        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
 
-        if let data = image.jpegData(compressionQuality: 0.8) {
-            do {
-                try data.write(to: fileURL)
-                return fileURL.path
-            } catch {
-                print("❌ Failed to save image: \(error)")
+
+    private func saveReadingLocally(_ reading: Reading) {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+
+        var readings: [Reading] = loadReadingsLocally()
+
+        if !readings.contains(where: { $0.id == reading.id }) {
+            readings.append(reading)
+        } else {
+            if let index = readings.firstIndex(where: { $0.id == reading.id }) {
+                readings[index] = reading
             }
         }
-        return nil
+
+        do {
+            let data = try JSONEncoder().encode(readings)
+            try data.write(to: fileURL, options: .atomic)
+            print("✅ Reading saved locally: \(reading.id)")
+        } catch {
+            print("❌ Failed to save reading locally: \(error)")
+        }
+    }
+
+
+
+    
+    private func loadReadingsLocally() -> [Reading] {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+
+        guard let data = try? Data(contentsOf: fileURL) else {
+            return []
+        }
+
+        return (try? JSONDecoder().decode([Reading].self, from: data)) ?? []
+    }
+
+     
+    private func saveImageLocally(image: UIImage, readingId: String, completion: @escaping (Result<String, Error>) -> Void) {
+        let fileName = "\(readingId).jpg"
+        let fileURL = getDocumentsDirectory().appendingPathComponent(fileName)
+
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            let error = NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG data."])
+            completion(.failure(error))
+            return
+        }
+
+        do {
+            try data.write(to: fileURL)
+            DispatchQueue.main.async { // Maintain async to prevent blocking the UI.
+                self.imageUrl = fileURL.path // ✅ Now imageUrl is a valid property
+            }
+            completion(.success(fileURL.path))
+        } catch {
+            print("❌ Failed to save image: \(error)")
+            completion(.failure(error))
+        }
     }
 
     
@@ -242,43 +284,6 @@ struct LightMeterView: View {
         capturedImage = nil
         print("🗑️ Local image deleted from: \(fileURL.path)")
         
-    }
-
-    private func saveToFirebase(reading: Reading) async {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            print("❌ User not authenticated.")
-            feedbackMessage = "❌ User not authenticated."
-            return
-        }
-         await saveReadingToFirestore(userId: userId, reading: reading)
-    }
-
-
-    private func saveReadingToFirestore(userId: String, reading: Reading) async {
-        let db = Firestore.firestore()
-        let readingData: [String: Any] = [
-            "id": reading.id,
-            "luxValue": reading.luxValue,
-            "timestamp": FieldValue.serverTimestamp(),
-            "lightReference": reading.lightReference,
-            "gridLocation": reading.gridLocation,
-            "siteLocation": reading.siteLocation,
-            "fixtureDetails": reading.fixtureDetails,
-            "knownWattage": reading.knownWattage,
-            "notes": reading.notes,
-            "isFaulty": reading.isFaulty,
-            "imageUrl": reading.imageUrl
-        ]
-        print("🚀 Saving data to Firestore with image URL: \(reading.imageUrl)")
-        do {
-            try await db.collection("users").document(userId).collection("readings").document(reading.id)
-                .setData(readingData, merge: true)
-           
-            print("✅ Firestore save successful with Image URL!")
-        } catch {
-            print("❌ Firestore save failed: \(error.localizedDescription)")
-            
-        }
     }
 
 
@@ -301,13 +306,10 @@ struct ActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 360, maxHeight: 530) // ⬆️ Increased height for better spacing
             .padding()
             .background(color.opacity(configuration.isPressed ? 0.8 : 1))
             .foregroundColor(.white)
             .cornerRadius(8)
     }
-}
-extension Color {
-    static let gold = Color(red: 255/255, green: 215/255, blue: 0/255)
 }

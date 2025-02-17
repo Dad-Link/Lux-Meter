@@ -41,3 +41,6 @@ struct MainTabView: View {
     }
 }
 
+extension Color {
+    static let gold = Color.yellow
+}

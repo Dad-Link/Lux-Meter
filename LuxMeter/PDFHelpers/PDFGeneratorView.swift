@@ -5,16 +5,18 @@ import FirebaseStorage
 import FirebaseFirestore
 
 struct PDFGeneratorView: View {
-    @State private var customTitle: String
-    @State private var lightReference: String
-    @State private var gridLocation: String
-    @State private var siteLocation: String
-    @State private var fixtureDetails: String
-    @State private var knownWattage: String
-    @State private var notes: String
-    @State private var isFaulty: Bool
+    @State private var customTitle: String = ""
+    @State private var lightReference: String = ""
+    @State private var lightLocation: String = "" // Added default value
+    @State private var siteLocation: String = ""
+    @State private var fixtureDetails: String = ""
+    @State private var knownWattage: String = ""
+    @State private var notes: String = ""
+    @State private var isFaulty: Bool = false
     @State private var showPDFPreview = false
     @State private var generatedPDFURL: URL?
+
+
     
     let reading: Reading
     let businessName: String
@@ -26,21 +28,26 @@ struct PDFGeneratorView: View {
     
     init(reading: Reading, businessName: String, businessAddress: String, businessEmail: String, businessNumber: String, businessLogoURL: String?, capturedImage: UIImage?) {
         self.reading = reading
-        self._customTitle = State(initialValue: reading.lightReference)
-        self._lightReference = State(initialValue: reading.lightReference)
-        self._gridLocation = State(initialValue: reading.gridLocation)
-        self._siteLocation = State(initialValue: reading.siteLocation)
-        self._fixtureDetails = State(initialValue: reading.fixtureDetails)
-        self._knownWattage = State(initialValue: reading.knownWattage)
-        self._notes = State(initialValue: reading.notes)
-        self._isFaulty = State(initialValue: reading.isFaulty)
         self.businessName = businessName
         self.businessAddress = businessAddress
         self.businessEmail = businessEmail
         self.businessNumber = businessNumber
         self.businessLogoURL = businessLogoURL
         self.capturedImage = capturedImage
+
+        // Populate @State properties via initializers
+        _customTitle = State(initialValue: reading.lightReference)
+        _lightReference = State(initialValue: reading.lightReference)
+        _lightLocation = State(initialValue: reading.lightLocation) // Corrected
+        _siteLocation = State(initialValue: reading.siteLocation)
+        _fixtureDetails = State(initialValue: reading.fixtureDetails)
+        _knownWattage = State(initialValue: reading.knownWattage)
+        _notes = State(initialValue: reading.notes)
+        _isFaulty = State(initialValue: reading.isFaulty)
     }
+
+
+
     
     var body: some View {
         VStack(spacing: 20) {
@@ -57,12 +64,13 @@ struct PDFGeneratorView: View {
             // Editable Fields
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Light Reference", text: $lightReference)
-                TextField("Grid Location", text: $gridLocation)
+                TextField("Light Location", text: $lightLocation) // Updated from Grid Location
                 TextField("Site Location", text: $siteLocation)
                 TextField("Fixture Details", text: $fixtureDetails)
                 TextField("Known Wattage", text: $knownWattage)
                 TextField("Notes", text: $notes)
             }
+
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .padding(.horizontal)
             
@@ -177,13 +185,14 @@ struct PDFContentView: View {
                 }
 
                 Text("Light Reference: \(reading.lightReference)")
-                Text("Grid Location: \(reading.gridLocation)")
+                Text("Light Location: \(reading.lightLocation)") // Updated field name
                 Text("Site Location: \(reading.siteLocation)")
                 Text("Fixture Details: \(reading.fixtureDetails)")
                 Text("Known Wattage: \(reading.knownWattage)")
                 Text("Notes: \(reading.notes)")
                 Text("Faulty: \(reading.isFaulty ? "Yes" : "No")")
                     .foregroundColor(reading.isFaulty ? .red : .black)
+
             }
             .padding()
             .background(Color.white)

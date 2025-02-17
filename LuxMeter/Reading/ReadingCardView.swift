@@ -8,28 +8,30 @@ import UIKit
 struct ReadingCardView: View {
     let actionHandler: (ReadingCardAction) -> Void
     let displayMode: ReadingCardDisplayMode
-    
+
     @State private var isFlipped = false
     @State private var disableTap = false
     @State private var showPDFPreview = false
     @State private var pdfURL: URL?
-    
+    @State private var isGeneratingPDF = false
+    @State private var pdfGenerationAttempted = false
+
     // Editable Fields (Updated on Save)
     @State private var lightReference: String
-    @State private var gridLocation: String
+    @State private var lightLocation: String = ""
     @State private var siteLocation: String
     @State private var fixtureDetails: String
     @State private var knownWattage: String
     @State private var notes: String
     @State private var isFaulty: Bool
-    @State private var imageUrl: String? // ✅ Change to optional
-    
+    @State private var imageUrl: String?
+
     let reading: Reading
-    let capturedImage: UIImage? // ✅ Mark as optional
-    
+    let capturedImage: UIImage?
+
     init(
         reading: Reading,
-        capturedImage: UIImage?, // ✅ Mark as optional
+        capturedImage: UIImage?,
         actionHandler: @escaping (ReadingCardAction) -> Void,
         displayMode: ReadingCardDisplayMode
     ) {
@@ -37,9 +39,9 @@ struct ReadingCardView: View {
         self.capturedImage = capturedImage
         self.actionHandler = actionHandler
         self.displayMode = displayMode
-        
+
         _lightReference = State(initialValue: reading.lightReference)
-        _gridLocation = State(initialValue: reading.gridLocation)
+        _lightLocation = State(initialValue: reading.lightLocation)
         _siteLocation = State(initialValue: reading.siteLocation)
         _fixtureDetails = State(initialValue: reading.fixtureDetails)
         _knownWattage = State(initialValue: reading.knownWattage)
@@ -47,21 +49,21 @@ struct ReadingCardView: View {
         _isFaulty = State(initialValue: reading.isFaulty)
         _imageUrl = State(initialValue: reading.imageUrl)
     }
-    
+
     var body: some View {
         VStack {
             Spacer()
-            
+
             ZStack {
                 displayCard
                     .opacity(isFlipped ? 0 : 1)
                     .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-                
+
                 editCard
                     .opacity(isFlipped ? 1 : 0)
                     .rotation3DEffect(.degrees(isFlipped ? 0 : -180), axis: (x: 0, y: 1, z: 0))
             }
-            .frame(maxWidth: 360, maxHeight: 420)
+            .frame(maxWidth: 360, maxHeight: 530)
             .background(Color.black.opacity(0.9))
             .cornerRadius(16)
             .shadow(color: Color.yellow.opacity(0.6), radius: 8)
@@ -81,63 +83,50 @@ struct ReadingCardView: View {
                     }
                 }
             }
-            
+            .onAppear {
+                // Pre-generate the PDF (if not already attempted)
+                // NOTE: We removed auto-show of the PDF preview here.
+                if !pdfGenerationAttempted {
+                    pdfGenerationAttempted = true
+                    generatePDF()
+                }
+            }
+
             Spacer()
         }
+        // PDFPreviewView is only shown when the user taps Download.
         .sheet(isPresented: $showPDFPreview) {
             if let pdfURL = pdfURL {
-                PDFPreviewView(pdfURL: pdfURL) // ✅ Show Preview before sharing
+                PDFPreviewView(pdfURL: pdfURL)
             }
         }
     }
+
     // MARK: - Display Card
-    // MARK: - Display Card
+
     private var displayCard: some View {
-        VStack {
+        VStack(spacing: 12) {
+            // Edit Button
             HStack {
                 Spacer()
                 Button(action: { withAnimation { isFlipped.toggle() } }) {
-                    Image(systemName: "highlighter")
+                    Image(systemName: "pencil.circle.fill")
                         .foregroundColor(.yellow)
                         .font(.title3)
                         .padding(10)
                 }
             }
-            .padding(.top, 6)
             .padding(.trailing, 10)
-             
-            // Display the image
-            if let capturedImage = capturedImage {
-                // ✅ Display newly captured image
-                Image(uiImage: capturedImage)
+
+            // Display Image
+            if let image = getImageForReading() {
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 160)
+                    .frame(height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(radius: 5)
-
-            } else if let localImagePath = reading.localImagePath, let localImage = loadImageFromPath(path: localImagePath) {
-                // ✅ Load from local storage if available
-                Image(uiImage: localImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 160)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(radius: 5)
-
-            } else if let imageUrlString = reading.imageUrl, let url = URL(string: imageUrlString) {
-                // ✅ Load from Firebase (AsyncImage)
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
-                    ProgressView()
-                }
-                .frame(height: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(radius: 5)
-
             } else {
-                // ✅ Show placeholder when no image is available
                 Image(systemName: "photo.fill")
                     .resizable()
                     .scaledToFit()
@@ -146,99 +135,89 @@ struct ReadingCardView: View {
                     .padding()
             }
 
-            
-            
-            // ✅ Display all reading values
+            // Reading Information
             Text("Lux Value: \(String(format: "%.2f", reading.luxValue)) lx")
-                .font(.headline)
+                .font(.title2)
                 .foregroundColor(.yellow)
                 .padding(.top, 4)
 
-            VStack(alignment: .leading) {
-                 Text("Reference: \(lightReference)").foregroundColor(.yellow).bold()
-                Text("Grid: \(gridLocation)").foregroundColor(.white.opacity(0.8))
-                Text("Site: \(siteLocation)").foregroundColor(.white.opacity(0.8))
-                Text("Fixture: \(fixtureDetails)").foregroundColor(.white.opacity(0.8))
-                Text("Wattage: \(knownWattage)").foregroundColor(.white.opacity(0.8))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("🔹 Reference: \(lightReference)").foregroundColor(.yellow).bold()
+                Text("📍 Light Location: \(reading.lightLocation)").foregroundColor(.white.opacity(0.8))
+                Text("📍 Site Location: \(siteLocation)").foregroundColor(.white.opacity(0.8))
+                Text("💡 Fixture: \(fixtureDetails)").foregroundColor(.white.opacity(0.8))
+                Text("⚡ Wattage: \(knownWattage)").foregroundColor(.white.opacity(0.8))
             }
             .padding(.horizontal, 12)
-            
-            // ✅ Buttons should always appear at the bottom
+
+            // Action Buttons: Save, Delete, Download
             HStack(spacing: 20) {
                 Button(action: { saveReading() }) {
-                    Image(systemName: "checkmark.circle.fill").buttonStyle(.green)
+                    Image(systemName: "checkmark.circle.fill")
+                        .buttonStyle(.green)
                 }
                 Button(action: { actionHandler(.delete) }) {
-                    Image(systemName: "trash.fill").buttonStyle(.red)
+                    Image(systemName: "trash.fill")
+                        .buttonStyle(.red)
                 }
-                Button(action: { generateAndSharePDF() }) {
-                    Image(systemName: "arrow.down.circle.fill").buttonStyle(.blue)
+                Button(action: { openPDFPreview() }) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .buttonStyle(.blue)
                 }
             }
             .padding(.vertical, 12)
-        }
-    }
-    
-    func loadImageFromPath(path: String) -> UIImage? {
-          let url = URL(fileURLWithPath: path)
-          if let data = try? Data(contentsOf: url) {
-              return UIImage(data: data)
-          } else {
-                return nil
-           }
-        }
-    
-    func loadImage(for readingId: String) -> UIImage? {
-        let fileManager = FileManager.default
-        let directory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
-        let fileURL = directory?.appendingPathComponent("\(readingId).jpg")
 
-        if let url = fileURL, let data = try? Data(contentsOf: url) {
-            return UIImage(data: data)
+            if isGeneratingPDF {
+                ProgressView("Generating PDF...")
+                    .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                    .foregroundColor(.yellow)
+                    .padding()
+            }
         }
-        return nil
+        .padding()
+        .background(Color.black.opacity(0.9))
+        .cornerRadius(16)
+        .shadow(radius: 5)
     }
 
-    
     // MARK: - Edit Card
+
     private var editCard: some View {
         VStack(spacing: 12) {
             Text("Edit Reading")
                 .font(.headline)
                 .foregroundColor(.yellow)
-            
+
             TextField("Reference", text: $lightReference)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
-            TextField("Grid Location", text: $gridLocation)
+
+            TextField("Light Location", text: $lightLocation)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
+
             TextField("Site Location", text: $siteLocation)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
+
             TextField("Fixture Details", text: $fixtureDetails)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
+
             TextField("Known Wattage", text: $knownWattage)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
+
             TextField("Notes", text: $notes)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-            
+
             HStack {
                 Text("Faulty?")
                     .foregroundColor(.yellow)
                 Toggle("", isOn: $isFaulty)
             }
             .padding(.top, 8)
-            
+
             HStack(spacing: 16) {
                 Button(action: { actionHandler(.delete) }) {
                     Image(systemName: "trash.fill").buttonStyle(.red)
                 }
-                Button(action: {
-                    saveReading() // ✅ Save and close card
-                }) {
+                Button(action: { saveReading() }) {
                     Image(systemName: "checkmark.circle.fill").buttonStyle(.green)
                 }
             }
@@ -249,84 +228,114 @@ struct ReadingCardView: View {
         .cornerRadius(12)
         .shadow(color: .white.opacity(0.3), radius: 8)
     }
-    
-    func saveImageLocally(_ image: UIImage, for readingId: String) -> URL? {
-        let fileManager = FileManager.default
-        let directory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
-        let fileURL = directory?.appendingPathComponent("\(readingId).jpg")
 
-        guard let data = image.jpegData(compressionQuality: 0.8), let url = fileURL else { return nil }
+    // MARK: - Image Helpers
+
+    private func getImageForReading() -> UIImage? {
+        if let capturedImage = capturedImage {
+            return capturedImage
+        }
+        if let localImagePath = getLocalImagePath(for: reading.id),
+           let localImage = loadImageFromPath(path: localImagePath) {
+            return localImage
+        }
+        return nil
+    }
+
+    private func loadImageFromPath(path: String) -> UIImage? {
+        let url = URL(fileURLWithPath: path)
+        if let data = try? Data(contentsOf: url) {
+            return UIImage(data: data)
+        }
+        return nil
+    }
+
+    private func getLocalImagePath(for readingId: String) -> String? {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("\(readingId).jpg")
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return fileURL.path
+        }
+        return nil
+    }
+
+    // MARK: - Save Reading
+
+    private func saveReading() {
+        var savedReadings = loadReadingsLocally()
+
+        if let index = savedReadings.firstIndex(where: { $0.id == reading.id }) {
+            savedReadings[index] = Reading(
+                id: reading.id,
+                luxValue: reading.luxValue,
+                timestamp: Date(),
+                lightReference: lightReference,
+                lightLocation: lightLocation,
+                siteLocation: siteLocation,
+                fixtureDetails: fixtureDetails,
+                knownWattage: knownWattage,
+                notes: notes,
+                isFaulty: isFaulty,
+                imageUrl: reading.imageUrl,
+                localImagePath: reading.localImagePath
+            )
+        } else {
+            savedReadings.append(reading)
+        }
 
         do {
-            try data.write(to: url)
-            return url
+            let data = try JSONEncoder().encode(savedReadings)
+            let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+            try data.write(to: fileURL, options: [.atomic])
+
+            withAnimation {
+                isFlipped = false
+                actionHandler(.close)
+            }
+            print("✅ Reading saved locally!")
         } catch {
-            print("❌ Failed to save image locally: \(error.localizedDescription)")
-            return nil
+            print("❌ Error saving reading: \(error)")
         }
     }
 
-    func uploadImageToFirebase(image: UIImage, readingId: String, completion: @escaping (String?) -> Void) {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let storageRef = Storage.storage().reference().child("users/\(userId)/readings/\(readingId).jpg")
-        
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            completion(nil)
-            return
-        }
-        
-        storageRef.putData(imageData, metadata: nil) { _, error in
-            if let error = error {
-                print("❌ Failed to upload image: \(error.localizedDescription)")
-                completion(nil)
-            } else {
-                storageRef.downloadURL { url, _ in
-                    completion(url?.absoluteString)
-                }
-            }
-        }
+    private func loadReadingsLocally() -> [Reading] {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+        return (try? JSONDecoder().decode([Reading].self, from: data)) ?? []
     }
-    private func saveReading() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-         
-         let updatedData: [String: Any] = [
-            "luxValue": reading.luxValue,
-             "lightReference": lightReference,
-            "gridLocation": gridLocation,
-            "siteLocation": siteLocation,
-            "fixtureDetails": fixtureDetails,
-             "knownWattage": knownWattage,
-            "notes": notes,
-             "isFaulty": isFaulty,
-            "timestamp": FieldValue.serverTimestamp(),
-             "imageUrl": imageUrl ?? ""
-        ]
-           print("📡 Updating Firestore with new reading: \(updatedData)")
-        
-        db.collection("users").document(userId).collection("readings").document(reading.id)
-            .setData(updatedData, merge: true) { error in
-                if let error = error {
-                    print("❌ Firestore save failed: \(error.localizedDescription)")
-                } else {
-                    print("✅ Firestore save successful!")
-                     withAnimation {
-                        isFlipped = false
-                        actionHandler(.close) // ✅ Close after saving
-                    }
-                }
-            }
+
+    private func getDocumentsDirectory() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     }
-    
-    // MARK: - Generate & Preview PDF
-    private func generateAndSharePDF() {
+
+    // MARK: - PDF Generation & Preview
+
+    private func generatePDF() {
+        isGeneratingPDF = true
+        // Use the completion-based PDF generation.
         PDFGenerator.generatePDF(reading: reading) { url in
             DispatchQueue.main.async {
-                if let pdfURL = url {
-                    self.pdfURL = pdfURL
-                    self.showPDFPreview = true // ✅ Shows preview before sharing
+                self.isGeneratingPDF = false
+                if let url = url {
+                    self.pdfURL = url
+                    // NOTE: We no longer auto-show the PDF preview here.
                 } else {
                     print("❌ Failed to generate PDF")
+                }
+            }
+        }
+    }
+
+    /// Called by the Download button.
+    private func openPDFPreview() {
+        if pdfURL != nil {
+            showPDFPreview = true
+        } else {
+            // If PDF isn’t ready yet, generate it first and then show the preview.
+            generatePDF()
+            // Optionally, you can add a delay or a progress indicator here.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                if self.pdfURL != nil {
+                    self.showPDFPreview = true
                 }
             }
         }
@@ -334,8 +343,12 @@ struct ReadingCardView: View {
 }
 
 // MARK: - Custom Button Styling
+
 extension Image {
     func buttonStyle(_ color: Color) -> some View {
-        self.resizable().scaledToFit().frame(width: 30, height: 30).foregroundColor(color)
+        self.resizable()
+            .scaledToFit()
+            .frame(width: 30, height: 30)
+            .foregroundColor(color)
     }
 }

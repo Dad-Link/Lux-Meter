@@ -4,15 +4,20 @@ import FirebaseAuth
 import PDFKit
 
 struct ReadingsView: View {
-    @State private var readings: [Reading] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var listener: ListenerRegistration? // Added listener
+    @State private var listener: ListenerRegistration?
+    @StateObject private var dataManager = ReadingDataManager()
+
+    @State private var showShareSheet = false
+    @State private var pdfURL: URL?
+    @State private var selectedReading: Reading?
 
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black
+                    .edgesIgnoringSafeArea(.all)
 
                 VStack(spacing: 20) {
                     titleSection
@@ -21,7 +26,7 @@ struct ReadingsView: View {
                         loadingState
                     } else if let errorMessage = errorMessage {
                         errorState(errorMessage)
-                    } else if readings.isEmpty {
+                    } else if dataManager.readings.isEmpty {
                         emptyState
                     } else {
                         readingsList
@@ -29,9 +34,14 @@ struct ReadingsView: View {
                 }
                 .padding()
             }
-            .onAppear(perform: setupListener) // Updated .onAppear to call the listener
-            .onDisappear(perform: removeListener) // Removes Listener when the view disappears
+            .onAppear(perform: setupListener)
+            .onDisappear(perform: removeListener)
             .navigationBarTitle("Readings", displayMode: .inline)
+            .sheet(isPresented: $showShareSheet) {
+                if let url = pdfURL {
+                    ShareSheet(activityItems: [url])
+                }
+            }
         }
     }
 
@@ -90,86 +100,78 @@ struct ReadingsView: View {
 
     private var readingsList: some View {
         ScrollView {
-            VStack(spacing: 15) {
-                ForEach(readings) { reading in
+            LazyVStack(spacing: 15) {
+                ForEach(dataManager.readings) { reading in
                     ReadingCardView(
                         reading: reading,
-                        capturedImage: nil,
+                        capturedImage: loadImageForReading(reading: reading),
                         actionHandler: { action in
                             handleAction(action, for: reading)
                         },
                         displayMode: .deleteOrDownload
                     )
-                    .padding()
-                    .background(Color.black.opacity(0.9))
+                    .frame(maxWidth: 360)
+                    .padding(.vertical, 8)
+                    .background(Color.black)
                     .cornerRadius(16)
                     .shadow(radius: 5)
                 }
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
         }
     }
-    
-    private func setupListener() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
 
-        let db = Firestore.firestore()
+    // MARK: - Helper Functions
+
+    private func loadImageForReading(reading: Reading) -> UIImage? {
+        if let localImagePath = getLocalImagePath(for: reading.id) {
+            return loadImageFromPath(path: localImagePath)
+        }
+        return nil
+    }
+
+    private func setupListener() {
         isLoading = true
 
-        listener = db.collection("users").document(userId).collection("readings")
-            .order(by: "timestamp", descending: true)
-            .addSnapshotListener { snapshot, error in
-                isLoading = false
-                if let error = error {
-                    errorMessage = "Error loading readings: \(error.localizedDescription)"
-                    return
-                }
+        DispatchQueue.global(qos: .background).async {
+            let savedReadings = loadReadingsLocally()
 
-                guard let documents = snapshot?.documents else { return }
-                self.readings = documents.compactMap { doc -> Reading? in
-                    let data = doc.data()
-                    let localImagePath = getLocalImagePath(for: doc.documentID) // ✅ Load from local storage
-
-                    return Reading(
-                        id: doc.documentID,
-                        luxValue: data["luxValue"] as? Float ?? 0.0,
-                        timestamp: (data["timestamp"] as? Timestamp)?.dateValue() ?? Date(),
-                        lightReference: data["lightReference"] as? String ?? "",
-                        gridLocation: data["gridLocation"] as? String ?? "",
-                        siteLocation: data["siteLocation"] as? String ?? "",
-                        fixtureDetails: data["fixtureDetails"] as? String ?? "",
-                        knownWattage: data["knownWattage"] as? String ?? "",
-                        notes: data["notes"] as? String ?? "",
-                        isFaulty: data["isFaulty"] as? Bool ?? false,
-                        imageUrl: data["imageUrl"] as? String,
-                        localImagePath: localImagePath // ✅ Use local image path if available
-                    )
-                }
+            DispatchQueue.main.async {
+                self.dataManager.readings = savedReadings
+                self.isLoading = false
+                print("📄 Loaded \(savedReadings.count) readings from local storage.")
             }
-    }
-    
-    private func loadImageFromPath(path: String) -> UIImage? {
-        let fileURL = URL(fileURLWithPath: path)
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            return UIImage(contentsOfFile: fileURL.path)
         }
-        return nil
     }
-    private func getLocalImagePath(for readingId: String) -> String? {
-        let fileName = "\(readingId).jpg"
-        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-        
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            return fileURL.path
+
+    private func loadReadingsLocally() -> [Reading] {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+        return (try? JSONDecoder().decode([Reading].self, from: data)) ?? []
+    }
+
+    private func getDocumentsDirectory() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    }
+
+    func loadImageFromPath(path: String) -> UIImage? {
+        let url = URL(fileURLWithPath: path)
+        if let data = try? Data(contentsOf: url) {
+            return UIImage(data: data)
         }
         return nil
     }
 
-    
-   private func removeListener(){
-      listener?.remove()
+    private func getLocalImagePath(for readingId: String) -> String? {
+        let fileURL = getDocumentsDirectory().appendingPathComponent("\(readingId).jpg")
+        return FileManager.default.fileExists(atPath: fileURL.path) ? fileURL.path : nil
     }
-    
+
+    private func removeListener(){
+        listener?.remove()
+    }
+
     private func handleAction(_ action: ReadingCardAction, for reading: Reading) {
         switch action {
         case .delete:
@@ -177,34 +179,37 @@ struct ReadingsView: View {
         case .save:
             saveReading(reading)
         case .download:
+            selectedReading = reading
             generatePDF(for: reading)
         case .close:
             print("✅ Close action triggered inside ReadingCardView.")
         }
     }
-    
+
     private func saveReading(_ reading: Reading) {
         guard let userId = Auth.auth().currentUser?.uid else {
             print("❌ Error: No authenticated user found.")
             return
         }
-        
+
         let db = Firestore.firestore()
         let readingData: [String: Any] = [
             "id": reading.id,
             "luxValue": reading.luxValue,
             "timestamp": FieldValue.serverTimestamp(),
             "lightReference": reading.lightReference,
-            "gridLocation": reading.gridLocation,
+            "lightLocation": reading.lightLocation,
             "siteLocation": reading.siteLocation,
             "fixtureDetails": reading.fixtureDetails,
             "knownWattage": reading.knownWattage,
             "notes": reading.notes,
             "isFaulty": reading.isFaulty,
-            "imageUrl": reading.imageUrl ?? ""
+            "imageUrl": reading.imageUrl ?? "",
+            "localImagePath": reading.localImagePath ?? ""
         ]
-        
-        db.collection("users").document(userId).collection("readings").document(reading.id)
+
+        db.collection("users").document(userId)
+            .collection("readings").document(reading.id)
             .setData(readingData, merge: true) { error in
                 if let error = error {
                     print("❌ Error saving reading: \(error.localizedDescription)")
@@ -213,54 +218,62 @@ struct ReadingsView: View {
                 }
             }
     }
-    
-    private func deleteReading(_ reading: Reading) {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
 
-        db.collection("users").document(userId).collection("readings").document(reading.id).delete { error in
+    private func deleteReading(_ reading: Reading) {
+        var savedReadings = loadReadingsLocally()
+        savedReadings.removeAll { $0.id == reading.id }
+
+        do {
+            let data = try JSONEncoder().encode(savedReadings)
+            let fileURL = getDocumentsDirectory().appendingPathComponent("readings.json")
+            try data.write(to: fileURL, options: .atomic)
+
             DispatchQueue.main.async {
-                if let error = error {
-                    errorMessage = "Error deleting reading: \(error.localizedDescription)"
-                } else {
-                    withAnimation {
-                        readings.removeAll { $0.id == reading.id }
-                    }
-                    print("✅ Reading deleted successfully.")
+                withAnimation {
+                    self.dataManager.readings = savedReadings
                 }
             }
+            print("✅ Reading deleted successfully.")
+        } catch {
+            print("❌ Error deleting reading: \(error.localizedDescription)")
         }
     }
-       
-   private func generatePDF(for reading: Reading) {
-          guard let userId = Auth.auth().currentUser?.uid else { return }
-      
-          PDFGenerator.generatePDF(reading: reading) { url in
-              DispatchQueue.main.async {
-                  if let url = url {
-                      print("✅ PDF generated: \(url)")
-                     sharePDF(url)
-                  } else {
-                      print("❌ Failed to generate PDF")
-                  }
-              }
-          }
-      }
 
-    private func sharePDF(_ url: URL) {
-        let activityController = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-            let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityController, animated: true, completion: nil)
+    private func generatePDF(for reading: Reading) {
+        // Use the completion handler version of PDFGenerator.generatePDF.
+        PDFGenerator.generatePDF(reading: reading) { url in
+            DispatchQueue.main.async {
+                if let url = url {
+                    self.pdfURL = url
+                    self.showShareSheet = true
+                } else {
+                    print("❌ Failed to generate PDF.")
+                    self.errorMessage = "Failed to generate PDF. Please try again."
+                }
+            }
         }
     }
 }
 
 // MARK: - Enum for Button Actions
+
 enum ReadingCardAction {
     case delete
     case save
     case download
     case close
+}
+
+// MARK: - ShareSheet View (for presenting UIActivityViewController)
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems,
+                                 applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) { }
 }

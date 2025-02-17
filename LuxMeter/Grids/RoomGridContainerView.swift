@@ -25,12 +25,13 @@ struct RoomGridContainerView: View {
             }
             .onAppear {
                 if gridId.isEmpty {
-                    print("❌ ERROR: gridId is empty in RoomGridContainerView")
+                    print("❌ ERROR: gridId is empty")
                 } else {
-                    print("✅ RoomGridContainerView gridId: \(gridId), Loading grid data...")
+                    print("✅ Loading grid with ID: \(gridId)")
                     loadGridData()
                 }
             }
+
         }
         .navigationBarHidden(true)
     }
@@ -39,14 +40,24 @@ struct RoomGridContainerView: View {
         let jsonFileName = "grids.json"
         let jsonFilePath = FileManager.default.temporaryDirectory.appendingPathComponent(jsonFileName)
 
-        // Load grids from JSON to find the correct grid name
+        // Load grids from JSON to find the correct grid name and details
         do {
             let data = try Data(contentsOf: jsonFilePath)
             let grids = try JSONDecoder().decode([Grid].self, from: data)
-            
+
             // Find the grid with the matching gridId
-            if let matchingGrid = grids.first(where: { $0.id == gridId }) {
-                self.gridName = matchingGrid.gridName
+            if let matchingGrid = grids.first(where: { $0.gridId == gridId }) {
+                self.gridName = matchingGrid.jobName
+
+                // Pass these details to the RoomGridView via UserDefaults or State
+                UserDefaults.standard.set(matchingGrid.businessName, forKey: "businessName")
+                UserDefaults.standard.set(matchingGrid.address, forKey: "address")
+                UserDefaults.standard.set(matchingGrid.town, forKey: "town")
+                UserDefaults.standard.set(matchingGrid.city, forKey: "city")
+                UserDefaults.standard.set(matchingGrid.postcode, forKey: "postcode")
+                UserDefaults.standard.set(matchingGrid.startDate.description, forKey: "startDate")
+
+                print("✅ Loaded Grid Details: \(matchingGrid)")
             } else {
                 self.gridName = "Unnamed Grid"
             }
@@ -54,7 +65,7 @@ struct RoomGridContainerView: View {
             print("⚠️ No JSON file found or error reading: \(error.localizedDescription)")
             self.gridName = "Unnamed Grid"
         }
-        
+
         let csvFileName = "\(gridId).csv"
         let csvFilePath = FileManager.default.temporaryDirectory.appendingPathComponent(csvFileName)
 
@@ -85,6 +96,7 @@ struct RoomGridContainerView: View {
             print("⚠️ No CSV file found for grid \(gridId). A new one will be created when saving.")
         }
     }
+
 
     /// **Convert the dictionary to a 2D array for heatmap visualization**
     private func convertTo2DArray(from dictionary: [String: LuxCell]) -> [[Int]] {

@@ -1,38 +1,35 @@
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
-import FirebaseStorage
-import FirebaseFunctions
+import PDFKit
 
-struct MyDetailsView: View {
-    @State private var firstName = ""
-    @State private var lastName = ""
+struct BusinessDetails: View {
     @State private var businessName = ""
     @State private var businessAddress = ""
     @State private var businessEmail = ""
     @State private var businessNumber = ""
-    @State private var personalEmail = ""
-    @State private var downloadedPDFs: [String] = []
     @State private var businessLogo: UIImage?
     @State private var isLoading = false
     @State private var feedbackMessage: FeedbackMessage?
     @State private var showImagePicker = false
-    @State private var showDeleteConfirmation = false
-    @State private var showFinalDeleteConfirmation = false
-    private let logoFilename = "businessLogo.jpg" // ✅ File name for local storage
-    @Environment(\.presentationMode) var presentationMode // ✅ Controls navigation
-    @EnvironmentObject var authViewModel: AuthViewModel // 🔥 Inject ViewModel
-    @State private var showDeleteAccountView = false  // 🔹 Show password prompt for deletion
-    @State private var password: String = ""  // 🔥 Add this to store user input
+    private let logoFilename = "businessLogo.jpg"
 
+    // UserDefaults Keys
+    private let businessNameKey = "businessNameKey"
+    private let businessAddressKey = "businessAddressKey"
+    private let businessEmailKey = "businessEmailKey"
+    private let businessNumberKey = "businessNumberKey"
 
-    
+    // State for User Defaults storage
+    @AppStorage("storedBusinessName") private var storedBusinessName: String = ""
+    @AppStorage("storedBusinessAddress") private var storedBusinessAddress: String = ""
+    @AppStorage("storedBusinessEmail") private var storedBusinessEmail: String = ""
+    @AppStorage("storedBusinessNumber") private var storedBusinessNumber: String = ""
+
     var body: some View {
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all) // Background
+            Color.black.edgesIgnoringSafeArea(.all)
+
             ScrollView {
                 VStack(spacing: 20) {
-                    // ✅ Logo at the top
                     VStack {
                         if let logo = businessLogo {
                             Image(uiImage: logo)
@@ -59,49 +56,34 @@ struct MyDetailsView: View {
                         }
                     }
                     .padding(.top)
-                    
-                    // ✅ Title and Description
+
                     VStack(spacing: 5) {
-                        Text("My Details")
+                        Text("Business Details")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.gold)
-                            .toolbarBackground(Color.black, for: .navigationBar) 
-                            .toolbarColorScheme(.dark, for: .navigationBar)
-                        Text("Manage your personal and business details. Keep everything up-to-date!")
+                        Text("Add your business details to customize your reports.")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.85))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
-                    
-                    Toggle("Enable Auto-Login", isOn: $authViewModel.autoLoginEnabled)
-                        .toggleStyle(SwitchToggleStyle(tint: .gold))
-                        .padding(.horizontal, 20)
-                        .foregroundColor(.white)
-                    
+
                     Divider().background(Color.gold.opacity(0.5))
-                    
-                    // ✅ Form for user details
+
                     VStack(spacing: 15) {
-                        Group {
-                            CustomTextField(title: "First Name", text: $firstName)
-                            CustomTextField(title: "Last Name", text: $lastName)
-                            CustomTextField(title: "Personal Email", text: $personalEmail, keyboardType: .emailAddress)
-                        }
-                        Divider().background(Color.gold)
-                        Group {
-                            CustomTextField(title: "Business Name", text: $businessName)
-                            CustomTextField(title: "Business Address", text: $businessAddress)
-                            CustomTextField(title: "Business Email", text: $businessEmail, keyboardType: .emailAddress)
-                            CustomTextField(title: "Business Number", text: $businessNumber, keyboardType: .phonePad)
-                        }
+                        CustomTextField(title: "Business Name", text: $businessName)
+                        CustomTextField(title: "Business Address", text: $businessAddress)
+                        CustomTextField(title: "Business Email", text: $businessEmail, keyboardType: .emailAddress)
+                        CustomTextField(title: "Business Number", text: $businessNumber, keyboardType: .phonePad)
                     }
                     .padding(.horizontal)
-                    
-                    // ✅ Save Button
-                    Button(action: saveDetailsToFirebase) {
-                        Text("Save Changes")
+
+                    Button(action: {
+                        saveDetailsLocally()
+                        generateAndSaveBusinessDetailsDocument()
+                    }) {
+                        Text("Save Changes and Generate Document")
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -111,40 +93,17 @@ struct MyDetailsView: View {
                             .shadow(radius: 5)
                             .padding(.horizontal)
                     }
-                    Button(action: logout) {
-                        Text("Logout")
+
+                    Button(action: clearAllDetails) {
+                        Text("Clear All Business Details")
                             .fontWeight(.bold)
-                            .foregroundColor(.red)
+                            .foregroundColor(.blue)
                             .padding()
-                            .background(Color.white)
+                            .background(Color.white.opacity(0.8))
                             .cornerRadius(10)
                             .shadow(radius: 5)
                     }
-                    Button(action: { showDeleteAccountView = true }) {
-                        Text("Delete Account")
-                            .fontWeight(.bold)
-                            .foregroundColor(.red)
-                            .padding()
-                            .background(Color.black.opacity(0.8))
-                            .cornerRadius(10)
-                            .shadow(radius: 5)
-                    }
-                    .sheet(isPresented: $showDeleteAccountView) {
-                        DeleteAccountView(
-                            dismiss: {
-                                showDeleteAccountView = false
-                                authViewModel.isLoggedIn = false  // Ensure logout
-                            },
-                            deleteAccount: { password in  // ✅ Pass delete function properly
-                                deleteAccount(password: password)
-                            }
-                        )
-                        .environmentObject(authViewModel)
-                    }
 
-
-                    
-                    // ✅ Powered By Footer
                     Link(destination: URL(string: "https://dadlink.co.uk")!) {
                         Text("Powered by DadLink Technologies Limited")
                             .font(.footnote)
@@ -156,282 +115,157 @@ struct MyDetailsView: View {
                 }
                 .padding()
             }
+
             if isLoading {
                 ProgressView("Saving...")
                     .progressViewStyle(CircularProgressViewStyle())
             }
         }
-        .navigationTitle("My Details")
+        .navigationTitle("Business Details")
         .sheet(isPresented: $showImagePicker) {
-            ImagePicker(image: $businessLogo, onImagePicked: saveBusinessLogoLocally) // ✅ Save locally
+            ImagePicker(image: $businessLogo, onImagePicked: saveBusinessLogoLocally)
         }
-        .onAppear(perform: fetchDetailsFromFirebase)
+        .onAppear(perform: loadDetailsLocally)
+        .onChange(of: businessName) { newValue in storedBusinessName = newValue }
+        .onChange(of: businessAddress) { newValue in storedBusinessAddress = newValue }
+        .onChange(of: businessEmail) { newValue in storedBusinessEmail = newValue }
+        .onChange(of: businessNumber) { newValue in storedBusinessNumber = newValue }
         .alert(item: $feedbackMessage) { message in
             Alert(title: Text("Info"), message: Text(message.text), dismissButton: .default(Text("OK")))
         }
-        .alert("Enter your password to delete your account", isPresented: $showDeleteConfirmation, actions: {
-            SecureField("Password", text: $password)  // 🔥 Capture password
-            Button("Delete", role: .destructive) {
-                deleteAccount(password: password)  // ✅ Pass password properly
-            }
-            Button("Cancel", role: .cancel) {}
-        })
+    }
+
+    private func loadDetailsLocally() {
+        businessName = storedBusinessName
+        businessAddress = storedBusinessAddress
+        businessEmail = storedBusinessEmail
+        businessNumber = storedBusinessNumber
+        loadBusinessLogoLocally()
+    }
+
+    private func saveDetailsLocally() {
+      
     }
     
-    private func logout() {
+
+    private func generateAndSaveBusinessDetailsDocument() {
+        // 1. Create PDF metadata
+        let pdfMetaData = [
+            kCGPDFContextCreator: "Lux Meter App",
+            kCGPDFContextAuthor: "User",
+            kCGPDFContextTitle: "Business Details"
+        ] as [CFString: Any]
+
+        // 2. Define page format
+        let format = UIGraphicsPDFRendererFormat()
+        format.documentInfo = pdfMetaData as [String: Any]
+
+        let pageWidth = 8.5 * 72.0 // Standard letter size
+        let pageHeight = 11 * 72.0
+        let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
+
+        // 3. Create PDF renderer
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
+
+        // 4. Render PDF data
+        let data = renderer.pdfData { (context) in
+            context.beginPage()
+            addBusinessDetailsContent(context: context, rect: pageRect)
+        }
+
+        // 5. Get document directory URL
+        guard let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+
+        // 6. Create file URL
+        let fileURL = documentDirectory.appendingPathComponent("BusinessDetails.pdf")
+
+        // 7. Write PDF data to file
         do {
-            try Auth.auth().signOut()
-            print("✅ User signed out successfully.") // ✅ Log success
-            presentationMode.wrappedValue.dismiss() // ✅ Navigate back to LoginView
-        } catch let signOutError as NSError {
-            print("❌ Error signing out: \(signOutError.localizedDescription)")
-            feedbackMessage = FeedbackMessage(text: "Failed to log out. Please try again.")
+            try data.write(to: fileURL)
+            feedbackMessage = FeedbackMessage(text: "Business details document created and saved.")
+        } catch {
+            feedbackMessage = FeedbackMessage(text: "Error writing PDF to file: \(error.localizedDescription)")
+            print("Error writing PDF to file: \(error)")
         }
     }
-    
-    // ✅ Fetch User Details (From Firebase or Local)
-    private func fetchDetailsFromFirebase() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-        isLoading = true
-        db.collection("users").document(userId).getDocument { document, error in
-            isLoading = false
-            if let document = document, document.exists {
-                firstName = document.data()?["firstName"] as? String ?? ""
-                lastName = document.data()?["lastName"] as? String ?? ""
-                businessName = document.data()?["businessName"] as? String ?? ""
-                businessAddress = document.data()?["businessAddress"] as? String ?? ""
-                businessEmail = document.data()?["businessEmail"] as? String ?? ""
-                businessNumber = document.data()?["businessNumber"] as? String ?? ""
-                personalEmail = document.data()?["personalEmail"] as? String ?? ""
-                if let logoUrl = document.data()?["businessLogo"] as? String {
-                    fetchBusinessLogo(from: logoUrl)
-                } else {
-                    loadBusinessLogoLocally() // ✅ Load from device
-                }
-            } else {
-                feedbackMessage = FeedbackMessage(text: "Failed to load details.")
+
+    private func addBusinessDetailsContent(context: UIGraphicsPDFRendererContext, rect: CGRect) {
+        let margin: CGFloat = 20
+        let availableWidth = rect.width - 2 * margin
+        var currentY = margin
+
+        let titleFont = UIFont.boldSystemFont(ofSize: 24)
+        let textFont = UIFont.systemFont(ofSize: 14)
+
+        func addText(text: String, font: UIFont, maxWidth: CGFloat) {
+            let attributes = [NSAttributedString.Key.font: font]
+            let attributedString = NSAttributedString(string: text, attributes: attributes)
+
+            let textRect = CGRect(x: margin, y: currentY, width: maxWidth, height: attributedString.size().height)
+            attributedString.draw(in: textRect)
+            currentY += attributedString.size().height + 5
+        }
+
+        addText(text: "Business Details", font: titleFont, maxWidth: availableWidth)
+
+        if let logo = businessLogo {
+            let logoWidth: CGFloat = 100
+            let logoHeight: CGFloat = 100
+            let logoX = margin
+            let logoY = currentY
+            let logoRect = CGRect(x: logoX, y: logoY, width: logoWidth, height: logoHeight)
+
+            logo.draw(in: logoRect)
+            currentY += logoHeight + 10
+        }
+
+        addText(text: "Name: \(businessName)", font: textFont, maxWidth: availableWidth)
+        addText(text: "Address: \(businessAddress)", font: textFont, maxWidth: availableWidth)
+        addText(text: "Email: \(businessEmail)", font: textFont, maxWidth: availableWidth)
+        addText(text: "Number: \(businessNumber)", font: textFont, maxWidth: availableWidth)
+    }
+
+
+    private func clearAllDetails() {
+
+        businessName = ""
+        businessAddress = ""
+        businessEmail = ""
+        businessNumber = ""
+
+        storedBusinessName = ""
+        storedBusinessAddress = ""
+        storedBusinessEmail = ""
+        storedBusinessNumber = ""
+
+        businessLogo = nil
+
+        if let url = getLocalLogoURL() {
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                print("Error deleting logo file: \(error)")
             }
         }
     }
-    
-    // ✅ Fetch Business Logo from Firebase (If Needed)
-    private func fetchBusinessLogo(from url: String) {
-        guard let logoUrl = URL(string: url) else { return }
-        URLSession.shared.dataTask(with: logoUrl) { data, _, _ in
-            if let data = data {
-                DispatchQueue.main.async {
-                    businessLogo = UIImage(data: data)
-                    saveBusinessLogoLocally(image: businessLogo!) // ✅ Save locally
-                }
-            }
-        }.resume()
-    }
-    
-    // ✅ Save Business Logo Locally
+
     private func saveBusinessLogoLocally(image: UIImage) {
         if let data = image.jpegData(compressionQuality: 0.8), let url = getLocalLogoURL() {
             try? data.write(to: url, options: .atomic)
             businessLogo = image
         }
     }
-    
-    // ✅ Load Business Logo from Device
+
     private func loadBusinessLogoLocally() {
         if let url = getLocalLogoURL(), let data = try? Data(contentsOf: url) {
             businessLogo = UIImage(data: data)
         }
     }
-    
-    // ✅ Get File URL for Local Logo Storage
+
     private func getLocalLogoURL() -> URL? {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(logoFilename)
-    }
-    
-    private func deleteAccount(password: String) {
-        guard let user = Auth.auth().currentUser, let email = user.email, !isLoading else { return }
-
-        isLoading = true
-        feedbackMessage = FeedbackMessage(text: "Deleting account... Please wait.")
-
-        let db = Firestore.firestore()
-        let userId = user.uid
-        let group = DispatchGroup()
-
-        // 🔥 Step 1: Re-authenticate User with Provided Password
-        group.enter()
-        let credential = EmailAuthProvider.credential(withEmail: email, password: password)  // 🔑 Use entered password
-        user.reauthenticate(with: credential) { _, error in
-            if let error = error {
-                print("❌ Re-authentication failed: \(error.localizedDescription)")
-                feedbackMessage = FeedbackMessage(text: "Incorrect password. Please try again.")
-                isLoading = false
-                group.leave()
-                return
-            }
-            print("✅ User re-authenticated.")
-            group.leave()
-        }
-
-        // 🔥 Step 2: Delete Firestore Subcollections
-        group.enter()
-        deleteSubcollections(userId: userId) { error in
-            if let error = error {
-                print("❌ Error deleting subcollections: \(error.localizedDescription)")
-            } else {
-                print("✅ Subcollections deleted.")
-            }
-            group.leave()
-        }
-
-        // 🔥 Step 3: Delete Firebase Storage Files
-        group.enter()
-        deleteUserStorageFiles(userId: userId) { storageError in
-            if let storageError = storageError {
-                print("❌ Error deleting storage files: \(storageError.localizedDescription)")
-            } else {
-                print("✅ User storage files deleted.")
-            }
-            group.leave()
-        }
-
-        // 🔥 Step 4: Delete Firestore User Document
-        group.enter()
-        db.collection("users").document(userId).delete { error in
-            if let error = error {
-                print("❌ Failed to delete user document: \(error.localizedDescription)")
-            } else {
-                print("✅ User document deleted.")
-            }
-            group.leave()
-        }
-
-        // 🔥 Step 5: Delete Firebase Authentication Account After All Data is Deleted
-        group.notify(queue: .main) {
-            print("✅ All user data deleted. Now deleting Firebase Authentication...")
-
-            user.delete { authError in
-                DispatchQueue.main.async {
-                    self.isLoading = false
-                    if let authError = authError {
-                        print("❌ Failed to delete user from Firebase Auth: \(authError.localizedDescription)")
-                        self.feedbackMessage = FeedbackMessage(text: "Failed to delete user. Try again later.")
-                        return
-                    }
-
-                    print("✅ User account deleted successfully.")
-
-                    // 🔥 Navigate back to login screen after deletion
-                    authViewModel.isLoggedIn = false  // ✅ Reset authentication state
-                }
-            }
-        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(logoFilename)
     }
 
-
-
-    private func deleteSubcollections(userId: String, completion: @escaping (Error?) -> Void) {
-        let db = Firestore.firestore()
-        let subcollections = ["readings", "grids"]
-        let group = DispatchGroup()
-
-        for sub in subcollections {
-            let collectionRef = db.collection("users").document(userId).collection(sub)
-            group.enter()
-
-            collectionRef.getDocuments { (snapshot, error) in
-                if let error = error {
-                    print("❌ Error fetching subcollection \(sub): \(error.localizedDescription)")
-                    group.leave()
-                    return
-                }
-
-                guard let snapshot = snapshot, !snapshot.isEmpty else {
-                    print("⚠️ No documents found in \(sub), skipping...")
-                    group.leave()
-                    return
-                }
-
-                let batch = db.batch()
-                for document in snapshot.documents {
-                    batch.deleteDocument(document.reference)
-                }
-
-                batch.commit { err in
-                    if let err = err {
-                        print("❌ Error deleting subcollection \(sub): \(err.localizedDescription)")
-                    } else {
-                        print("✅ Successfully deleted subcollection \(sub)")
-                    }
-                    group.leave()
-                }
-            }
-        }
-
-        group.notify(queue: .main) {
-            print("✅ All subcollections deleted.")
-            completion(nil)
-        }
-    }
-
-    private func deleteUserStorageFiles(userId: String, completion: @escaping (Error?) -> Void) {
-        let storageRef = Storage.storage().reference().child("users/\(userId)/")
-
-        storageRef.listAll { (result, error) in
-            if let error = error {
-                completion(error)
-                return
-            }
-
-            // ✅ Unwrap `result` safely
-            guard let result = result else {
-                print("❌ Error: Failed to list storage files.")
-                completion(NSError(domain: "StorageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to list storage files"]))
-                return
-            }
-
-            let group = DispatchGroup()
-
-            for file in result.items {
-                group.enter()
-                file.delete { error in
-                    if let error = error {
-                        print("❌ Failed to delete file: \(file.name), Error: \(error.localizedDescription)")
-                    } else {
-                        print("✅ Successfully deleted file: \(file.name)")
-                    }
-                    group.leave()
-                }
-            }
-
-            group.notify(queue: .main) {
-                print("✅ All user storage files deleted.")
-                completion(nil)
-            }
-        }
-    }
-
-
-    // ✅ Save Details to Firebase
-    private func saveDetailsToFirebase() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-        var data: [String: Any] = [
-            "firstName": firstName,
-            "lastName": lastName,
-            "businessName": businessName,
-            "businessAddress": businessAddress,
-            "businessEmail": businessEmail,
-            "businessNumber": businessNumber,
-            "personalEmail": personalEmail,
-            "createdAt": FieldValue.serverTimestamp()
-        ]
-        isLoading = true
-        db.collection("users").document(userId).setData(data, merge: true) { error in
-            isLoading = false
-            feedbackMessage = error == nil ? FeedbackMessage(text: "Details saved!") : FeedbackMessage(text: "Failed to save.")
-        }
-    }
 }
 
 // MARK: - Reusable Custom TextField

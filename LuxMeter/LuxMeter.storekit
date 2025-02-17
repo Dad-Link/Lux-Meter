@@ -1,0 +1,142 @@
+{
+  "appPolicies" : {
+    "eula" : "End-User License Agreement (EULA) for LuxMeter\n--------------------------------------------------\nThis End-User License Agreement (\"Agreement\") is a legal agreement between you (\"User\") and DadLink Technologies Limited (\"Developer\") for the use of the LuxMeter application (\"App\").\n\n1. **License Grant**: Developer grants you a limited, non-exclusive, non-transferable license to use this app.\n2. **Subscription Terms**: In-app subscriptions provide access to premium features and content. Subscriptions renew automatically unless canceled 24 hours before the period ends.\n3. **Refunds and Cancellations**: Payments are charged to your Apple ID account. Refunds are managed through Apple.\n4. **Privacy**: Your personal data is not collected, stored, or shared by the App.\n5. **Usage Restrictions**: Users must comply with applicable laws and avoid misuse of the App.\n6. **Support and Contact**: For support, visit [https://dadlink.co.uk](https://dadlink.co.uk).\n\nBy using the LuxMeter app, you agree to these terms.\n\n---\n\nDadLink Technologies Limited © 2024\n",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "7E8E596B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "C9AF58E7",
+      "localizations" : [
+
+      ],
+      "name" : "Lux Pro Access",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "1.99",
+          "familyShareable" : true,
+          "groupNumber" : 1,
+          "internalID" : "52FB2CC5",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "connect.weekly.luxProPass",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Weekly Lux Pass ",
+          "subscriptionGroupID" : "C9AF58E7",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : true,
+          "groupNumber" : 1,
+          "internalID" : "EC1058CB",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "connect.Monthly.luxProPass",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Monthly Lux Pass ",
+          "subscriptionGroupID" : "C9AF58E7",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

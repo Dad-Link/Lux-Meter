@@ -1,25 +1,30 @@
+import UIKit
 import Firebase
-import FirebaseAppCheck
 import FirebaseMessaging
 import UserNotifications
+import StoreKit
 
 class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate {
+
+    static var isSubscribed: Bool = false // Global subscription state
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        // Configure Firebase
+        // ✅ Configure Firebase (Keep if using Firestore for data storage)
         FirebaseApp.configure()
 
-        // Configure App Check with DeviceCheck for security
-        AppCheck.setAppCheckProviderFactory(DeviceCheckProviderFactory())
-
-        // Set Firebase Messaging delegate
+        // ✅ Set Firebase Messaging delegate
         Messaging.messaging().delegate = self
 
-        // Request notification permissions
+        // ✅ Request notification permissions
         requestNotificationPermissions()
+
+        // ✅ Check subscription status at launch
+        Task {
+            await checkSubscriptionStatus()
+        }
 
         return true
     }
@@ -29,66 +34,43 @@ class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNot
         center.delegate = self
         center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             if let error = error {
-                print("Failed to request notifications authorization: \(error.localizedDescription)")
+                print("❌ Failed to request notifications authorization: \(error.localizedDescription)")
             }
 
             if granted {
-                print("Notification permissions granted.")
+                print("✅ Notification permissions granted.")
                 DispatchQueue.main.async {
                     UIApplication.shared.registerForRemoteNotifications()
                 }
             } else {
-                print("Notification permissions denied.")
+                print("❌ Notification permissions denied.")
             }
         }
     }
 
-    func application(
-        _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-        // Forward the device token to Firebase Messaging
-        Messaging.messaging().apnsToken = deviceToken
-        print("Device token registered: \(deviceToken)")
-    }
+    // ✅ StoreKit 2: Check Subscription Status (No Login Required)
+    @MainActor
+    private func checkSubscriptionStatus() async {
+        do {
+            let productIDs: [String] = ["connect.weekly.luxProPass", "connect.Monthly.luxProPass"]
 
-    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        guard let fcmToken = fcmToken else {
-            print("Failed to retrieve FCM token.")
-            return
+            for productID in productIDs {
+                if let product = try? await Product.products(for: [productID]).first,
+                   let subscriptionStatus = try await product.subscription?.status.first {
+                    
+                    if subscriptionStatus.state == .subscribed {
+                        AppDelegate.isSubscribed = true
+                        print("🔔 Subscription Active!")
+                        return
+                    }
+                }
+            }
+
+            AppDelegate.isSubscribed = false
+            print("❌ No active subscription.")
+
+        } catch {
+            print("❌ Failed to check subscription status: \(error.localizedDescription)")
         }
-
-        // Save FCM token locally for later use
-        UserDefaults.standard.setValue(fcmToken, forKey: "fcmToken")
-        print("FCM Token: \(fcmToken)")
-
-        // Optional: Send token to your backend if needed
-        sendFCMTokenToServer(fcmToken)
-    }
-
-    private func sendFCMTokenToServer(_ token: String) {
-        // Placeholder for sending the FCM token to your backend server
-        print("Sending FCM token to server: \(token)")
-        // Add your backend API call here
-    }
-
-    // Handle notifications while the app is in the foreground
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        print("Notification received in foreground: \(notification.request.content.userInfo)")
-        completionHandler([.alert, .sound, .badge])
-    }
-
-    // Handle notifications when the app is tapped or in the background
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        print("User interacted with notification: \(response.notification.request.content.userInfo)")
-        completionHandler()
     }
 }
