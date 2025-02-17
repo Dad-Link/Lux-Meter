@@ -4,8 +4,9 @@ import StoreKit
 struct SubscriptionCard: View {
     var subscription: SKProduct
     @Binding var currentSubscriptionPlan: String
-    @Binding var isLoading: Bool
-    var onPurchaseError: (String) -> Void  // Add this closure
+    var onPurchaseError: (String) -> Void  // Parent view handles error messages
+    
+    @State private var isButtonLoading: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -21,35 +22,51 @@ struct SubscriptionCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            let priceDescription = getPriceDescription(for: subscription)
-            Text(priceDescription)
+            Text(getPriceDescription(for: subscription))
                 .font(.title3)
                 .foregroundColor(.yellow)
                 .fixedSize(horizontal: false, vertical: true)
 
-            let description = getSubscriptionDescription(for: subscription.productIdentifier)
-            Text(description)
+            Text(getSubscriptionDescription(for: subscription.productIdentifier))
                 .font(.footnote)
                 .foregroundColor(.white)
                 .padding(.vertical, 5)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-
             Button(action: {
-                isLoading = true
-                SubscriptionManager.shared.buyProduct(subscription) {
-                    // We now call a completion and pass the result to handler
+                withAnimation {
+                    isButtonLoading = true
+                }
+                SubscriptionManager.shared.buyProduct(subscription) { errorString in
+                    withAnimation {
+                        isButtonLoading = false
+                    }
+                    if let errorString = errorString {
+                        onPurchaseError(errorString)
+                    } else {
+                        // Optionally update the current subscription plan here
+                        // currentSubscriptionPlan = subscription.productIdentifier
+                    }
                 }
             }) {
-                Text("Subscribe Now")
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.yellow)
-                    .foregroundColor(.black)
-                    .cornerRadius(10)
+                HStack(spacing: 8) {
+                    if isButtonLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                    }
+                    Text("Subscribe Now")
+                        .fontWeight(.bold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.yellow)
+                .foregroundColor(.black)
+                .cornerRadius(10)
+                .opacity(isButtonLoading ? 0.7 : 1.0)
+                .animation(.easeInOut, value: isButtonLoading)
             }
+            .disabled(isButtonLoading)
         }
         .padding()
         .background(Color.black)
@@ -57,17 +74,17 @@ struct SubscriptionCard: View {
         .listRowInsets(EdgeInsets())
     }
 
-    // ... getPriceDescription and getSubscriptionDescription remain unchanged ...
+    // Helper functions (unchanged)
     private func getPriceDescription(for subscription: SKProduct) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.locale = subscription.priceLocale
-        let formattedPrice = formatter.string(from: subscription.price) ?? "\(subscription.price)" // Fallback
-
+        let formattedPrice = formatter.string(from: subscription.price) ?? "\(subscription.price)"
+        
         let duration: String
         if let period = subscription.subscriptionPeriod {
             switch period.unit {
-            case .day:   duration = period.numberOfUnits == 1 ? "day" : "\(period.numberOfUnits) days" //Handle Days
+            case .day:   duration = period.numberOfUnits == 1 ? "day" : "\(period.numberOfUnits) days"
             case .week:  duration = period.numberOfUnits == 1 ? "week" : "\(period.numberOfUnits) weeks"
             case .month: duration = period.numberOfUnits == 1 ? "month" : "\(period.numberOfUnits) months"
             case .year:  duration = period.numberOfUnits == 1 ? "year" : "\(period.numberOfUnits) years"
@@ -76,7 +93,6 @@ struct SubscriptionCard: View {
         } else {
             duration = "Unknown"
         }
-
         return "Price: \(formattedPrice) / \(duration)"
     }
 

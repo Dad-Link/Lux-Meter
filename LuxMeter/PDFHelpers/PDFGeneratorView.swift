@@ -45,9 +45,6 @@ struct PDFGeneratorView: View {
         _notes = State(initialValue: reading.notes)
         _isFaulty = State(initialValue: reading.isFaulty)
     }
-
-
-
     
     var body: some View {
         VStack(spacing: 20) {

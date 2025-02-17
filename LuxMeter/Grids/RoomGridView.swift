@@ -3,7 +3,7 @@ import UIKit
 import FirebaseFirestore
 
 struct RoomGridView: View {
-    @Environment(\.dismiss) var dismiss // Use dismiss to go back manually
+    @Environment(\.dismiss) var dismiss // Used to go back
     @State private var luxGrid: [String: LuxCell] = [:]
     @Binding var is3DView: Bool
     @State private var selectedCell: (row: Int, column: Int)? = nil
@@ -12,10 +12,15 @@ struct RoomGridView: View {
     @State private var showSaveSuccess: Bool = false
     @State private var gridId: String
     @State private var zoomScale: CGFloat = 1.0 // Track zoom level
-    
+
+    // New toggle to switch between square and circle cells.
+    @State private var useCircleCells: Bool = false
+
+    // PDF export properties
     @State private var showPDFPreview = false
     @State private var generatedPDFURL: URL?
     
+    // Business details (if needed)
     @State private var businessName = ""
     @State private var firstName = ""
     @State private var lastName = ""
@@ -32,59 +37,106 @@ struct RoomGridView: View {
     @State private var postcode: String = ""
     @State private var startDate = Date()
     
+    // Toggle for showing Stats view
+    @State private var showStats = false
+    
+    // For cell deletion confirmation.
+    @State private var cellToDelete: (row: Int, column: Int)? = nil
+    @State private var showDeleteAlert: Bool = false
+    
     init(is3DView: Binding<Bool>, gridId: String) {
         _is3DView = is3DView
         self.gridId = gridId
     }
     
+    // MARK: - Computed Properties for Stats Display
+
+    private var totalLux: Int {
+        luxGrid.values.compactMap { $0.luxValue }.reduce(0, +)
+    }
+    
+    private var numberOfCells: Int {
+        luxGrid.count
+    }
+    
+    private var averageLux: Double {
+        numberOfCells > 0 ? Double(totalLux) / Double(numberOfCells) : 0.0
+    }
+    
+    private var gridRows: Int {
+        let rows = luxGrid.keys.compactMap { Int($0.split(separator: "_")[0]) }
+        return (rows.max() ?? 0) + 1
+    }
+    
+    private var gridColumns: Int {
+        let cols = luxGrid.keys.compactMap { Int($0.split(separator: "_")[1]) }
+        return (cols.max() ?? 0) + 1
+    }
+    
+    // Assuming each cell is 1.0 m². Adjust as needed.
+    private let cellArea: Double = 1.0
+    
+    private var totalGridArea: Double {
+        Double(gridRows * gridColumns) * cellArea
+    }
+    
+    // MARK: - Stats Display View
+
+    private var statsDisplay: some View {
+        VStack(spacing: 4) {
+            // Titles on one line
+            HStack {
+                Spacer()
+                Text("Total Grid Area")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                Spacer()
+                Text("Total Lux")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                Spacer()
+                Text("Average Lux")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                Spacer()
+            }
+            // Values on the line below the titles
+            HStack {
+                Spacer()
+                Text(String(format: "%.1f m²", totalGridArea))
+                    .font(.headline)
+                    .foregroundColor(.yellow)
+                Spacer()
+                Text("\(totalLux)")
+                    .font(.headline)
+                    .foregroundColor(.yellow)
+                Spacer()
+                Text(String(format: "%.1f", averageLux))
+                    .font(.headline)
+                    .foregroundColor(.yellow)
+                Spacer()
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - Main Body
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Custom Navigation Bar with Back Button
-            HStack {
-                Button(action: {
-                    dismiss() // Go back to the previous screen
-                }) {
-                    Image(systemName: "chevron.left.circle.fill")
-                        .font(.largeTitle)
-                        .foregroundColor(.red) // Red Back Button
-                }
-                .padding(.leading, 16)
-                
-                Spacer()
-                
-                Text("Room Grid Mapping")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.gold)
-                
-                Spacer()
-                
-                // Hidden image to balance alignment
-                Image(systemName: "chevron.left.circle.fill")
-                    .opacity(0)
-            }
-            .padding()
-            .background(Color.black.edgesIgnoringSafeArea(.top))
-            
-            Divider().background(Color.gray) // Separator
-            
-            // Instructional Text
-            Text("Use the controls below to add or delete rows/columns. Then tap a cell to enter its lux reading.")
-                .font(.body)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-            
-            // Grid Content & Controls
+            headerSection
+            Divider().background(Color.gray)
+            instructionSection
+            // Inject the stats view here (just below the instructions)
+            statsDisplay
             ZStack {
                 VStack {
                     gridDisplayView
-                    controlsView
+                    controlsSection
                     Spacer()
                 }
                 .overlay(alignment: .bottom) {
-                    if let cell = selectedCell {
+                    if let _ = selectedCell {
                         CellInputView(
                             selectedCell: $selectedCell,
                             lightReference: $lightReference,
@@ -92,29 +144,79 @@ struct RoomGridView: View {
                             showSaveSuccess: $showSaveSuccess,
                             luxGrid: $luxGrid,
                             gridId: gridId,
-                            onSave: { row, col in
-                                saveCell(row: row, col: col)
-                            },
-                            onDismiss: {
-                                selectedCell = nil
-                            }
+                            onSave: { row, col in saveCell(row: row, col: col) },
+                            onDismiss: { selectedCell = nil }
                         )
                         .transition(.move(edge: .bottom))
                     }
                 }
             }
-            .onAppear {
-                loadGridData()
+            .onAppear { loadGridData() }
+        }
+        // Alert for confirming cell deletion.
+        .alert("Delete Cell?", isPresented: $showDeleteAlert, presenting: cellToDelete) { cell in
+            Button("Delete", role: .destructive) {
+                let key = "\(cell.row)_\(cell.column)"
+                luxGrid.removeValue(forKey: key)
+                saveGridData()
+                cellToDelete = nil
             }
+            Button("Cancel", role: .cancel) {
+                cellToDelete = nil
+            }
+        } message: { cell in
+            Text("Are you sure you want to delete this cell?")
+        }
+        // Pass the binding for cell shape to the Stats view.
+        .sheet(isPresented: $showStats) {
+            StatsView(luxGrid: $luxGrid, useCircleCells: $useCircleCells)
         }
     }
+    
+    // MARK: - Header & Instruction Sections
+    
+    private var headerSection: some View {
+        HStack {
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left.circle.fill")
+                    .font(.largeTitle)
+                    .foregroundColor(.red)
+            }
+            .padding(.leading, 16)
+            
+            Spacer()
+            
+            Text("Room Grid Mapping")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.gold)
+            
+            Spacer()
+            
+            // Hidden image for alignment
+            Image(systemName: "chevron.left.circle.fill")
+                .opacity(0)
+        }
+        .padding()
+        .background(Color.black.edgesIgnoringSafeArea(.top))
+    }
+    
+    private var instructionSection: some View {
+        Text("Use the controls below to add or delete rows/columns. Tap a cell to enter its lux reading.")
+            .font(.body)
+            .foregroundColor(.white)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+    }
+    
+    // MARK: - Grid Display Section
     
     private var gridDisplayView: some View {
         ScrollView([.vertical, .horizontal]) {
             VStack {
                 let rows = findMaxRow()
                 let cols = findMaxColumn()
-                
                 VStack {
                     ForEach(0...rows, id: \.self) { row in
                         HStack {
@@ -124,11 +226,11 @@ struct RoomGridView: View {
                         }
                     }
                 }
-                .scaleEffect(zoomScale) // Apply zoom level
+                .scaleEffect(zoomScale)
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
-                            zoomScale = max(0.5, min(value, 2.0)) // Allow zooming out (0.5x) & in (2.0x)
+                            zoomScale = max(0.5, min(value, 2.0))
                         }
                 )
             }
@@ -136,87 +238,106 @@ struct RoomGridView: View {
         .frame(maxHeight: 500)
     }
     
+    // Use a view builder to conditionally show circles or squares.
+    @ViewBuilder
     private func gridCellView(row: Int, column: Int) -> some View {
         let key = "\(row)_\(column)"
         let cell = luxGrid[key]
         let isSelected = selectedCell?.row == row && selectedCell?.column == column
         
-        return Button(action: {
-            selectedCell = (row, column)
-            lightReference = cell?.lightReference
-            luxValue = cell?.luxValue.map { String($0) } ?? ""
-        }) {
+        if useCircleCells {
             Text(cell?.luxValue.map { String($0) } ?? "")
                 .frame(width: 40, height: 40)
-                .foregroundColor(Color.yellow)
-                .background(
-                    isSelected ? Color.green.opacity(0.8) : Color.gray.opacity(0.5)
-                )
+                .foregroundColor(.yellow)
+                .background(isSelected ? Color.green.opacity(0.8) : Color.gray.opacity(0.5))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.black, lineWidth: 1))
+                .contentShape(Circle())
+                .onTapGesture {
+                    selectedCell = (row, column)
+                    lightReference = cell?.lightReference
+                    luxValue = cell?.luxValue.map { String($0) } ?? ""
+                }
+                .onLongPressGesture(minimumDuration: 2) {
+                    cellToDelete = (row, column)
+                    showDeleteAlert = true
+                }
+        } else {
+            Text(cell?.luxValue.map { String($0) } ?? "")
+                .frame(width: 40, height: 40)
+                .foregroundColor(.yellow)
+                .background(isSelected ? Color.green.opacity(0.8) : Color.gray.opacity(0.5))
                 .border(Color.black)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedCell = (row, column)
+                    lightReference = cell?.lightReference
+                    luxValue = cell?.luxValue.map { String($0) } ?? ""
+                }
+                .onLongPressGesture(minimumDuration: 2) {
+                    cellToDelete = (row, column)
+                    showDeleteAlert = true
+                }
         }
     }
     
-    // Modified Controls View with a clickable export link below the row
-    private var controlsView: some View {
+    // MARK: - Controls Section
+    
+    private var controlsSection: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
-                // Add Row Button
                 Button(action: { addRow() }) {
                     VStack {
                         Image(systemName: "plus.square.fill")
-                        Text("Row")
-                            .font(.caption)
+                        Text("Row").font(.caption)
                     }
                     .frame(width: 60, height: 60)
                     .background(Color.gold)
                     .foregroundColor(.black)
                     .cornerRadius(10)
                 }
-                
-                // Delete Row Button
                 Button(action: { deleteRow() }) {
                     VStack {
                         Image(systemName: "minus.square.fill")
-                        Text("Row")
-                            .font(.caption)
+                        Text("Row").font(.caption)
                     }
                     .frame(width: 60, height: 60)
                     .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
-                
-                // Add Column Button
                 Button(action: { addColumn() }) {
                     VStack {
                         Image(systemName: "plus.rectangle.fill")
-                        Text("Column")
-                            .font(.caption)
+                        Text("Column").font(.caption)
                     }
                     .frame(width: 60, height: 60)
                     .background(Color.gold)
                     .foregroundColor(.black)
                     .cornerRadius(10)
                 }
-                
-                // Delete Column Button
                 Button(action: { deleteColumn() }) {
                     VStack {
                         Image(systemName: "minus.rectangle.fill")
-                        Text("Column")
-                            .font(.caption)
+                        Text("Column").font(.caption)
                     }
                     .frame(width: 60, height: 60)
                     .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                Button(action: { showStats = true }) {
+                    VStack {
+                        Image(systemName: "chart.bar.xaxis")
+                        Text("Stats").font(.caption)
+                    }
+                    .frame(width: 60, height: 60)
+                    .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
             }
-            
-            // Clickable Export PDF Link below the control buttons
-            Button(action: {
-                exportGridToPDF()
-            }) {
+            Button(action: { exportGridToPDF() }) {
                 Text("Export PDF")
                     .font(.caption)
                     .underline()
@@ -227,7 +348,7 @@ struct RoomGridView: View {
         .padding()
         .sheet(isPresented: $showPDFPreview) {
             if let pdfURL = generatedPDFURL, FileManager.default.fileExists(atPath: pdfURL.path) {
-                PDFPreviewView(pdfURL: pdfURL) // Show full-screen preview when ready
+                PDFPreviewView(pdfURL: pdfURL)
             } else {
                 VStack {
                     Text("Generating PDF, please wait...")
@@ -235,24 +356,7 @@ struct RoomGridView: View {
                         .font(.headline)
                     ProgressView()
                 }
-                .onAppear {
-                    print("⚠️ PDF is still generating...")
-                }
-            }
-        }
-    }
-    
-    private func backButton() -> some View {
-        Button(action: {
-            dismiss() // Correctly dismiss the view
-        }) {
-            HStack {
-                Image(systemName: "chevron.left.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.red)
-                Text("Back")
-                    .font(.headline)
-                    .foregroundColor(.red)
+                .onAppear { print("⚠️ PDF is still generating...") }
             }
         }
     }
@@ -368,7 +472,6 @@ struct RoomGridView: View {
     private func exportGridToPDF() {
         self.showPDFPreview = true
         
-        // Retrieve details from UserDefaults (if any)
         let businessName = UserDefaults.standard.string(forKey: "businessName") ?? "N/A"
         let address = UserDefaults.standard.string(forKey: "address") ?? "N/A"
         let town = UserDefaults.standard.string(forKey: "town") ?? "N/A"
@@ -406,7 +509,6 @@ struct RoomGridView: View {
         if let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
             let fileName = "HeatMapReport_\(gridId).pdf"
             let fileURL = documentsURL.appendingPathComponent(fileName)
-            
             DispatchQueue.global(qos: .background).async {
                 do {
                     try pdfData.write(to: fileURL)
@@ -436,10 +538,10 @@ struct RoomGridView: View {
         return gridArray
     }
     
-    // MARK: - Business Details
+    // MARK: - Business Details & CSV Export (if needed)
     
     private func loadBusinessDetails() {
-        let userId = "12345" // Replace with actual user ID
+        let userId = "12345" // Replace with actual user ID.
         let db = Firestore.firestore()
         db.collection("users").document(userId).getDocument { snapshot, error in
             if let error = error {
